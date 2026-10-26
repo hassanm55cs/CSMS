@@ -2,3 +2,6 @@
 bin/
 obj/
 Migrations/
+docx_qa/
+docx_qa_full/
+output/

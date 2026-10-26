@@ -25,6 +25,19 @@ public class CustomersController : ControllerBase
         var customers = await _context.Customers.ToListAsync();
         return Ok(customers);
     }
+    [HttpGet("Get-customer/{id:int}")]
+    public async Task<IActionResult> GetCustomerById(int id)
+    {
+        var isexsist = _context.Customers.FirstOrDefault(x => x.CustomerId == id);
+        if (isexsist != null)
+        {
+            return Ok(isexsist);
+        }
+        else
+        {
+            return NotFound("not found");
+        }
+    }
     [HttpGet("GetCustomer-allCustomers-withcars")]
     public async Task<IActionResult> GetCustomerWithcars()
     {
@@ -77,7 +90,7 @@ public class CustomersController : ControllerBase
 
         return Ok("the customer is added");
     }
-    [HttpPut("Update-Customer/id")]
+    [HttpPut("Update-Customer/{id}")]
 public async Task<IActionResult> UpdateCustomer(int id, [FromBody] CustomerDto cust)
     {
         var customerExsist = await _context.Customers.FirstOrDefaultAsync(x => x.CustomerId == id);
