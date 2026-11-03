@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using CSMS.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -136,6 +137,10 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.ToTable("Customer");
+            entity.HasOne(c => c.User)
+                .WithOne()
+                .HasForeignKey<Customer>(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.Email, "IX_Customer_Email").IsUnique();
 
@@ -146,7 +151,7 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.FullName)
                 .HasMaxLength(30)
                 .HasColumnName("Full_name");
-            entity.Property(e => e.Phone).HasMaxLength(20);
+            entity.Property(e => e.Phone).HasMaxLength(11);
         });
 
         modelBuilder.Entity<Driver>(entity =>
@@ -158,7 +163,15 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.PhoneNumber, "IX_Drivers_PhoneNumber").IsUnique();
 
             entity.Property(e => e.Email).HasMaxLength(80);
+
             entity.Property(e => e.FullName).HasMaxLength(30);
+            entity.Property(e => e.PhoneNumber).HasMaxLength(11);
+
+            entity.HasOne(c => c.User)
+                .WithOne()
+                .HasForeignKey<Driver>(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
 
             entity.HasOne(d => d.Branch).WithMany(p => p.Drivers)
                 .HasForeignKey(d => d.BranchId)
@@ -232,6 +245,10 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(d => d.Branch).WithMany(p => p.Employees)
                 .HasForeignKey(d => d.BranchId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(c => c.User)
+                .WithOne()
+                .HasForeignKey<Employee>(c => c.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Product>(entity =>

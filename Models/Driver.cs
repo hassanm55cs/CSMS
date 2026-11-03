@@ -9,7 +9,7 @@ public partial class Driver
 
     public string FullName { get; set; } = null!;
 
-    public int PhoneNumber { get; set; }
+    public string PhoneNumber { get; set; }
 
     public string Email { get; set; } = null!;
 
@@ -17,11 +17,11 @@ public partial class Driver
 
     public double Salary { get; set; }
 
-    public bool IsAvailable { get; set; }
+    public bool ?IsAvailable { get; set; }
 
-    public string Latitude { get; set; } = null!;
+    public string? Latitude { get; set; } = null!;
 
-    public string Longitude { get; set; } = null!;
+    public string ?Longitude { get; set; } = null!;
 
     public int BranchId { get; set; }
 
@@ -30,5 +30,6 @@ public partial class Driver
     public virtual ICollection<EmergencyRequest> EmergencyRequests { get; set; } = new List<EmergencyRequest>();
 
     public virtual ICollection<EmergencyTruck> EmergencyTrucks { get; set; } = new List<EmergencyTruck>();
-    public virtual ApplicationUser User { get; set; }
+    public string? UserId { get; set; }
+    public virtual ApplicationUser? User { get; set; }
 }

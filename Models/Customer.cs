@@ -18,7 +18,8 @@ public partial class Customer
     public virtual ICollection<Car> Cars { get; set; } 
 
     public virtual ICollection<RentedCarCustomer> RentedCarCustomers { get; set; }
-    public virtual ApplicationUser User { get; set; }
+    public string? UserId{ get; set; }
+    public virtual ApplicationUser? User { get; set; }
     public List<Notification> Notifications { get; set; }
 
 }

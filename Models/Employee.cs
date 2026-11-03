@@ -28,6 +28,7 @@ public partial class Employee
     public virtual ServiceBranch? ServiceBranch { get; set; }
 
     public virtual ICollection<Visit> Visits { get; set; } = new List<Visit>();
-    public virtual ApplicationUser User { get; set; }
+    public string?UserId { get; set; } = null;
+    public virtual ApplicationUser? User { get; set; } = null;
     public List<Notification> Notifications { get; set; }
 }
