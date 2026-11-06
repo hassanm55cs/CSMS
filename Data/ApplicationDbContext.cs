@@ -367,6 +367,8 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(n => n.NotificationId);
             e.Property(n => n.Message).IsRequired();
+            e.Property(n => n.IsRead).HasDefaultValue(false);
+            e.Property(n => n.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             e.HasOne(n => n.Employee)
                 .WithMany(e => e.Notifications)
                 .HasForeignKey(n => n.EmployeeId)

@@ -15,6 +15,9 @@ using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using System.Text;
 using CSMS.service.Login;
+using CSMS.service.Car_serv;
+using CSMS.service.Notification_serv;
+using CSMS.service.Profile;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,6 +70,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IChangePassword, ChangePassword>();
 builder.Services.AddScoped<CustomerService>();
+builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<CarService>();
+builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();
@@ -137,4 +143,3 @@ static async Task SeedRolesAsync(IServiceProvider services)
         }
     }
 }
-

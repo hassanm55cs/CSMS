@@ -10,6 +10,8 @@
         public Customer Customer{ get; set; }
         public int VisitId{ get; set; }
         public Visit Visit{ get; set; }
+        public bool IsRead { get; set; }
+        public DateTime CreatedAt { get; set; }
 
     }
 }
