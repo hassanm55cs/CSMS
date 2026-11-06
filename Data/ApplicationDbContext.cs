@@ -77,6 +77,9 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasKey(e => e.LicencesPlate);
 
             entity.ToTable("Car");
+            entity.Property(c => c.FuelType).HasConversion<string>();
+            entity.Property(c => c.EngineType).HasConversion<string>();
+     
 
             entity.HasIndex(e => e.CustomerId, "IX_Car_Customer_Id");
 

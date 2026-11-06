@@ -16,18 +16,18 @@ public class CarService
         _context = context;
     }
 
-    public async Task<PagedViewModel<CarViewModel>?> GetCustomerCarsAsync(
+    public async Task<PagedViewModel<CarViewModel>>GetCustomerCarsAsync(
         string userId,
         CarListQueryDto query)
     {
         var customer = await _context.Customers
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.UserId == userId);
+        
         if (customer is null)
         {
             return null;
         }
-
         var cars = _context.Cars
             .AsNoTracking()
             .Where(car => car.CustomerId == customer.CustomerId);
@@ -105,25 +105,46 @@ public class CarService
             .SingleOrDefaultAsync();
     }
 
-    public async Task<CarCreateResult> AddCarAsync(string userId, CreateCarDto dto)
+    public async Task<CarCreateResult> AddCarAsync(
+      string userId, CreateCarDto dto)
     {
         if (!dto.ManufactureDate.HasValue ||
             dto.ManufactureDate.Value == default ||
             dto.ManufactureDate.Value > DateOnly.FromDateTime(DateTime.UtcNow))
         {
-            return new CarCreateResult(CarCreateStatus.InvalidManufactureDate, null, null);
+            return new CarCreateResult(
+                CarCreateStatus.InvalidManufactureDate, null, null);
+        }
+
+        if (!Enum.TryParse<FuelType>(
+                dto.FuelType, true, out var fuelType) ||
+            !Enum.IsDefined(typeof(FuelType), fuelType))
+        {
+            return new CarCreateResult(
+                CarCreateStatus.Invalid, null, null);
+        }
+        if (!Enum.TryParse<EngineType>(
+            dto.EngineType, true, out var engineType) ||
+        !Enum.IsDefined(typeof(EngineType), engineType))
+        {
+            return new CarCreateResult(
+                CarCreateStatus.Invalid, null, null);
         }
 
         var customer = await _context.Customers
             .SingleOrDefaultAsync(item => item.UserId == userId);
+
         if (customer is null)
         {
-            return new CarCreateResult(CarCreateStatus.CustomerNotFound, null, null);
+            return new CarCreateResult(
+                CarCreateStatus.CustomerNotFound, null, null);
         }
 
-        if (await _context.Cars.AnyAsync(car => car.LicencesPlate == dto.LicencePlate))
+        if (await _context.Cars.AnyAsync(
+                car => car.LicencesPlate == dto.LicencePlate))
         {
-            return new CarCreateResult(CarCreateStatus.LicencePlateAlreadyExists, null, null);
+            return new CarCreateResult(
+                CarCreateStatus.LicencePlateAlreadyExists, null, null);
         }
 
         var car = new Car
@@ -131,8 +152,8 @@ public class CarService
             LicencesPlate = dto.LicencePlate,
             Color = dto.Color,
             NoOfCylinders = dto.NoOfCylinders!.Value,
-            FuelType = dto.FuelType!.Value,
-            EngineType = dto.EngineType!.Value,
+            FuelType = fuelType,
+            EngineType = engineType,
             ManufactuareDate = dto.ManufactureDate.Value,
             CarCompany = dto.CarCompany,
             Model = dto.Model,
@@ -194,7 +215,7 @@ public class CarService
     {
         var car = await _context.Cars
             .Include(item => item.Customer)
-            .SingleOrDefaultAsync(item => item.LicencesPlate == licencePlate);
+            .SingleOrDefaultAsync(item => item.LicencesPlate == licencePlate&item.Customer.UserId==userId);
         if (car is null)
         {
             return CarDeleteStatus.NotFound;
@@ -248,7 +269,8 @@ public enum CarCreateStatus
     Created,
     CustomerNotFound,
     LicencePlateAlreadyExists,
-    InvalidManufactureDate
+    InvalidManufactureDate,
+    Invalid
 }
 
 public record CarCreateResult(

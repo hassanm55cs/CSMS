@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CSMS.Controllers;
 
 [ApiController]
-[Route("api/v1/profile")]
+[Route("profile")]
 [Authorize(Roles = "customer")]
 public class ProfileController : ControllerBase
 {
@@ -22,6 +22,7 @@ public class ProfileController : ControllerBase
     public async Task<IActionResult> GetProfile()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = User.FindFirstValue(ClaimTypes.Email);
         if (userId is null)
         {
             return Unauthorized();

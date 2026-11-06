@@ -14,11 +14,11 @@ public class CreateCarDto
     [Required, Range(1, int.MaxValue)]
     public int? NoOfCylinders { get; set; }
 
-    [Required, EnumDataType(typeof(FuelType))]
-    public FuelType? FuelType { get; set; }
+    [Required]
+    public string FuelType{ get; set; }
 
-    [Required, EnumDataType(typeof(EngineType))]
-    public EngineType? EngineType { get; set; }
+    [Required,]
+    public string EngineType { get; set; }
 
     [Required]
     public DateOnly? ManufactureDate { get; set; }

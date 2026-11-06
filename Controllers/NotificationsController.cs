@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CSMS.Controllers;
 
 [ApiController]
-[Route("api/v1/notifications")]
+[Route("notifications")]
 [Authorize]
 public class NotificationsController : ControllerBase
 {

@@ -76,7 +76,7 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();
-builder.Services.Configure<Jwt>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<Jwt>(builder.Configuration.GetSection("Jwt"));//maping the jwt form the setting to the jwt class in the folder helper
 builder.Services
     .AddAuthentication(options =>
     {

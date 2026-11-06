@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CSMS.Controllers;
 
 [ApiController]
-[Route("api/v1/cars")]
+[Route("cars")]
 [Authorize]
 public class CarsController : ControllerBase
 {
@@ -49,7 +49,7 @@ public class CarsController : ControllerBase
         return car is null ? NotFound() : Ok(car);
     }
 
-    [HttpPost]
+    [HttpPost("/Add-Car")]
     [Authorize(Roles = "customer")]
     public async Task<IActionResult> AddCar([FromBody] CreateCarDto dto)
     {
@@ -79,6 +79,10 @@ public class CarsController : ControllerBase
             CarCreateStatus.InvalidManufactureDate => BadRequest(new
             {
                 Message = "ManufactureDate must be a valid date that is not in the future."
+            }),
+            CarCreateStatus.Invalid => BadRequest(new
+            {
+                Message = "Fuel type is invalid.or engien type is invalid"
             }),
             _ => StatusCode(StatusCodes.Status500InternalServerError)
         };
