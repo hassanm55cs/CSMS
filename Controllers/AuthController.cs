@@ -161,7 +161,7 @@ namespace CSMS.Controllers
         {
             if(!ModelState.IsValid)
             {
-                return BadRequest("Invalid input data.");
+                return BadRequest("Invalid input data entered.");
             }
             var result = await _loginService.LoginAsync(dto);
             if(result.succsee)
@@ -179,6 +179,11 @@ namespace CSMS.Controllers
                     Error = result.error
                 });
             }
+        }
+        [HttpGet("get-all-users")]
+        public async Task<IActionResult> GetAllUsers()
+        {
+           return Ok("done");
         }
 
 
