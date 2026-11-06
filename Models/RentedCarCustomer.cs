@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CSMS.Enums;
+using System;
 using System.Collections.Generic;
 
 namespace CSMS.Models;
@@ -18,6 +19,10 @@ public partial class RentedCarCustomer
     public int CustomerId { get; set; }
 
     public string LicencsePlateRented { get; set; } = null!;
+
+    public RentalStatus Status { get; set; } = RentalStatus.Upcoming;
+
+    public string? CancellationReason { get; set; }
 
     public virtual Customer Customer { get; set; } = null!;
 

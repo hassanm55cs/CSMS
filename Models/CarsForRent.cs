@@ -22,5 +22,13 @@ public partial class CarsForRent
 
     public string Model { get; set; } = null!;
 
+    public decimal? PricePerDay { get; set; }
+
+    public bool IsUnderMaintenance { get; set; }
+
+    public int? BranchId { get; set; }
+
+    public virtual ServiceBranch? Branch { get; set; }
+
     public virtual ICollection<RentedCarCustomer> RentedCarCustomers { get; set; } = new List<RentedCarCustomer>();
 }

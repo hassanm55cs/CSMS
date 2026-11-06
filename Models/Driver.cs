@@ -30,6 +30,8 @@ public partial class Driver
     public virtual ICollection<EmergencyRequest> EmergencyRequests { get; set; } = new List<EmergencyRequest>();
 
     public virtual ICollection<EmergencyTruck> EmergencyTrucks { get; set; } = new List<EmergencyTruck>();
+
     public string? UserId { get; set; }
+
     public virtual ApplicationUser? User { get; set; }
 }

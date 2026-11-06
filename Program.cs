@@ -18,6 +18,11 @@ using CSMS.service.Login;
 using CSMS.service.Car_serv;
 using CSMS.service.Notification_serv;
 using CSMS.service.Profile;
+using CSMS.service.Rental_serv;
+using CSMS.service.Emergency_serv;
+using CSMS.service.Driver_serv;
+using CSMS.service.Fleet_serv;
+using CSMS.service.Admin_serv;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,6 +78,11 @@ builder.Services.AddScoped<CustomerService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<CarService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<RentalService>();
+builder.Services.AddScoped<EmergencyService>();
+builder.Services.AddScoped<DriverOperationsService>();
+builder.Services.AddScoped<EmergencyTruckService>();
+builder.Services.AddScoped<AdminReportsService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();

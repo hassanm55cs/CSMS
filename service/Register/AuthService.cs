@@ -153,6 +153,9 @@ namespace CSMS.service.Register
                 BranchId = driverdto.BranchId,
                 Salary = driverdto.Salary,
                 StartWorkDate = driverdto.StartWorkDate,
+                Latitude = driverdto.Latitude,
+                Longitude = driverdto.Longitude,
+                IsAvailable = true,
                 UserId = user.Id
             };
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using CSMS.Enums;
 using CSMS.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -135,6 +136,12 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             entity.Property(e => e.EngineType)
                 .HasConversion<string>();
+            entity.Property(e => e.PricePerDay).HasColumnType("decimal(18, 2)");
+
+            entity.HasOne(e => e.Branch)
+                .WithMany()
+                .HasForeignKey(e => e.BranchId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Customer>(entity =>
@@ -198,7 +205,20 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(d => d.DriverId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
             entity.Property(e => e.StatusEmergency)
-            .HasConversion<string>();
+                .HasConversion<string>();
+            entity.Property(e => e.ProblemType)
+                .HasMaxLength(50);
+            entity.Property(e => e.Description)
+                .HasMaxLength(2000);
+            entity.Property(e => e.CancellationReason)
+                .HasMaxLength(500);
+            entity.Property(e => e.EmergencyTruckLicencePlate)
+                .HasMaxLength(6);
+
+            entity.HasOne(e => e.EmergencyTruck)
+                .WithMany()
+                .HasForeignKey(e => e.EmergencyTruckLicencePlate)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<EmergencyTruck>(entity =>
@@ -209,7 +229,9 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.DriverId, "IX_EmergencyTrucks_DriverId");
 
-            entity.Property(e => e.LicencePlate).HasColumnName("Licence_Plate");
+            entity.Property(e => e.LicencePlate)
+                .HasMaxLength(6)
+                .HasColumnName("Licence_Plate");
             entity.Property(e => e.ManufactuareDate).HasColumnName("Manufactuare_Date");
 
             entity.HasOne(d => d.Branch).WithMany(p => p.EmergencyTrucks)
@@ -295,6 +317,10 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(d => d.LicencsePlateRentedNavigation).WithMany(p => p.RentedCarCustomers)
                 .HasForeignKey(d => d.LicencsePlateRented)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasDefaultValue(RentalStatus.Upcoming);
+            entity.Property(e => e.CancellationReason).HasMaxLength(500);
         });
 
         modelBuilder.Entity<Service>(entity =>

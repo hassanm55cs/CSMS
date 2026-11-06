@@ -12,7 +12,7 @@ public partial class EmergencyRequest
 
     public string CarLicencePlate { get; set; } = null!;
 
-    public int DriverId { get; set; }
+    public int? DriverId { get; set; }
 
     public string Latitude { get; set; } = null!;
 
@@ -22,6 +22,17 @@ public partial class EmergencyRequest
 
     public virtual Car CarLicencePlateNavigation { get; set; } = null!;
 
-    public virtual Driver Driver { get; set; } = null!;
-    public string ProblemType{ get; set; }
+    public virtual Driver? Driver { get; set; }
+
+    public string ProblemType { get; set; } = null!;
+
+    public string? Description { get; set; }
+
+    public string? CancellationReason { get; set; }
+
+    public string? EmergencyTruckLicencePlate { get; set; }
+
+    public virtual EmergencyTruck? EmergencyTruck { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 }

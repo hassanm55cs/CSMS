@@ -15,5 +15,9 @@ namespace CSMS.Dto
         public DateOnly StartWorkDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
         public string Password { get; set; }
         public string ConfirmPassword { get; set; }
+
+        public string? Latitude { get; set; }
+
+        public string? Longitude { get; set; }
     }
 }
