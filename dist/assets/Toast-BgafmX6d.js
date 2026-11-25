@@ -1,0 +1,1 @@
+import{r as c,j as r}from"./index-D202SEW5.js";function i({msg:e,type:s,onDone:t}){c.useEffect(()=>{const a=setTimeout(t,2800);return()=>clearTimeout(a)},[t]);const o={success:"✓",error:"✕",info:"ℹ"};return r.jsxs("div",{className:`toast toast-${s}`,role:"alert",children:[r.jsx("span",{className:"font-bold",children:o[s]})," ",e]})}export{i as T};

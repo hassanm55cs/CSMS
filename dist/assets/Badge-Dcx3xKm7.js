@@ -1,0 +1,1 @@
+import{j as r}from"./index-D202SEW5.js";function o({status:e}){const a=e.replace(/\s+/g,"-").toLowerCase();return r.jsx("span",{className:`badge badge-${a}`,children:e.replace(/-/g," ")})}export{o as B};
