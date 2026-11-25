@@ -31,5 +31,9 @@ public partial class Driver
 
     public virtual ICollection<EmergencyTruck> EmergencyTrucks { get; set; } = new List<EmergencyTruck>();
     public string? UserId { get; set; }
+    public bool IsVerified { get; set; }
+    public int? AcceptedBy { get; set; }
+    public int? RejectedBy { get; set; }
+    public Admin ?Admin{ get; set; }
     public virtual ApplicationUser? User { get; set; }
 }

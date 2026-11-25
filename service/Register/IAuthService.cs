@@ -1,4 +1,6 @@
-﻿using CSMS.Dto;
+﻿using CSMS.Dto.AuthDto;
+using CSMS.Dto.DriversDto;
+using CSMS.Dto.EmployeeDto;
 
 namespace CSMS.service.Register
 {

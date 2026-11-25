@@ -1,11 +1,11 @@
 ﻿using CSMS.Models;
-using CSMS.Helper;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using CSMS.Helpers;
 
 namespace CSMS.service.Token
 {
@@ -32,7 +32,8 @@ namespace CSMS.service.Token
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim("email_confirmed", user.EmailConfirmed.ToString())
             };
 
             if (!string.IsNullOrEmpty(user.Email))

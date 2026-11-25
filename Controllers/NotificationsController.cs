@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using CSMS.Dto;
+using CSMS.Dto.NotificationDto;
 using CSMS.service.Notification_serv;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

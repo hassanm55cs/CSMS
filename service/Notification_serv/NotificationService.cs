@@ -1,5 +1,5 @@
 using CSMS.Data;
-using CSMS.Dto;
+using CSMS.Dto.NotificationDto;
 using CSMS.ViewModel;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,9 +14,7 @@ public class NotificationService
         _context = context;
     }
 
-    public async Task<PagedViewModel<NotificationViewModel>> GetNotificationsAsync(
-        string userId,
-        NotificationListQueryDto query)
+    public async Task<PagedViewModel<NotificationViewModel>> GetNotificationsAsync(string userId,NotificationListQueryDto query)
     {
         var notifications = _context.Notifications
             .AsNoTracking()

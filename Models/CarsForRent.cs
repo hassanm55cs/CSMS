@@ -21,6 +21,7 @@ public partial class CarsForRent
     public string CarCompany { get; set; } = null!;
 
     public string Model { get; set; } = null!;
-
+    public double PricePerDay { get; set; }
+    public RentalCarStatus Status { get; set; } = RentalCarStatus.Available;
     public virtual ICollection<RentedCarCustomer> RentedCarCustomers { get; set; } = new List<RentedCarCustomer>();
 }

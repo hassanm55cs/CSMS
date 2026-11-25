@@ -1,28 +1,41 @@
+using CSMS.AppServices.Implementations;
+using CSMS.AppServices.Interfaces;
 using CSMS.Data;
-using CSMS.Helper;
+using CSMS.Helpers;
+using CSMS.Hubs;
 using CSMS.Models;
+using CSMS.service.Adminserv;
+using CSMS.service.Branch;
+using CSMS.service.Car_serv;
 using CSMS.service.ChangePassword;
 using CSMS.service.ConfirmationEmail;
 using CSMS.service.Customer_serv;
+using CSMS.service.Driver_serv;
+using CSMS.service.Emergency_serv;
 using CSMS.service.Emial;
+using CSMS.service.Inventory;
+using CSMS.service.Login;
+using CSMS.service.Notification_serv;
+using CSMS.service.Products;
+using CSMS.service.Profile;
 using CSMS.service.Register;
+using CSMS.service.Rental_serv;
 using CSMS.service.Token;
+using CSMS.service.Truck_serv;
+using CSMS.service.Visits;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using System.Text;
-using CSMS.service.Login;
-using CSMS.service.Car_serv;
-using CSMS.service.Notification_serv;
-using CSMS.service.Profile;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 //builder.Services.AddOpenApi();
 builder.Services.AddOpenApi(options =>
@@ -69,13 +82,27 @@ builder.Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IChangePassword, ChangePassword>();
-builder.Services.AddScoped<CustomerService>();
+builder.Services.AddScoped<ICustomerSerivce, CustomerService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<CarService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<ILoginService, LoginService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IEmailConfirmationService, EmailConfirmationService>();
+builder.Services.AddScoped<IVisitService, VisitService>();
+builder.Services.AddScoped<IBranchService, BranchService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IVisitService, VisitService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IRentalService, RentalService>();
+builder.Services.AddScoped<IRentalCarService, RentalCarService>();
+builder.Services.AddScoped<IEmergencyTruckService, EmergencyTruckService>();
+builder.Services.AddScoped<IEmergencyService, EmergencyService>();
+builder.Services.AddScoped<IDriverService, DriverService>();//IServiceScheduleService
+builder.Services.AddScoped<IServiceScheduleService,ServiceScheduleService>();
+
+
 builder.Services.Configure<Jwt>(builder.Configuration.GetSection("Jwt"));//maping the jwt form the setting to the jwt class in the folder helper
 builder.Services
     .AddAuthentication(options =>
@@ -106,6 +133,23 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(
                    Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var requestPath = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    requestPath.StartsWithSegments(NotificationHub.Route))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 
@@ -125,6 +169,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationHub>(NotificationHub.Route);
 
 app.Run();
 

@@ -1,7 +1,11 @@
-﻿using CSMS.Dto;
+﻿using CSMS.Dto.AuthDto;
+using CSMS.Dto.DriversDto;
 using CSMS.service.ChangePassword;
+using CSMS.service.Driver_serv;
 using CSMS.service.Register;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CSMS.Controllers
 {
@@ -12,64 +16,31 @@ namespace CSMS.Controllers
     {
         private readonly IAuthService _iauthService;
         private readonly IChangePassword _changePassword;
-        public DriverController(IAuthService iauthService, IChangePassword changePassword)
+        private readonly IDriverService _idriverService;
+        private string? Owner => User.FindFirstValue(ClaimTypes.NameIdentifier);
+        public DriverController(IAuthService iauthService, IChangePassword changePassword, IDriverService idriverService    )
         {
             _iauthService = iauthService;
             _changePassword = changePassword;
-        }
-        [HttpPost("Add-driver")]
-        public async Task<IActionResult> AddDriverAsync([FromBody] DriverDto dto)
-        {
-            if(!ModelState.IsValid)
-            {
-                return BadRequest("Invalid input data.");
-            }
-            if (dto.Salary == null|| dto.Salary <= 0 || dto.BranchId <= 0 || dto.PhoneNumber == null || dto.Password == null || dto.ConfirmPassword == null) 
-            {
-                return BadRequest("Salary, BranchId, PhoneNumber, Password, and ConfirmPassword are required and must be valid.");
-            }
-            if (dto.PhoneNumber.Length > 11)
-            {
-                return BadRequest("Phone number must be 11 digits or less.");
-            }
-            if(dto.Password!=dto.ConfirmPassword)
-            {
-                return BadRequest("Password and ConfirmPassword do not match.");
-            }
-            var result = await _iauthService.AddDriver(dto);
-            if (result.Success)
-            {
-                return Ok(new
-                {
-                    Message = "Driver added successfully.",
-                    DriverId = result.DriverId,
-                    UserId = result.UserId,
-                    Token = result.Token
-                });
-            }
-            else
-            {
-                return BadRequest(new
-                {
-                    Errors = result.Errors
-                });
-            }
-           
+            _idriverService = idriverService;
         }
         [HttpPut("change-password")]
         public async Task<IActionResult> UpdateDriverAsync([FromBody] ChangePasswordDto dto)
         {
-           if(dto.UserId == null || dto.CurrentPassword == null || dto.NewPassword == null)
+           if(!ModelState.IsValid)
             {
-                return BadRequest("UserId, current password, and new password are required.");
+                return BadRequest( (ModelState));
             }
-            var result = await _changePassword.ChangePasswordDriverAsync(dto);
+           if(Owner==null)
+            {
+                return Unauthorized();
+            }
+            var result = await _changePassword.ChangePasswordAsync(Owner,dto);
             if (result.Success)
             {
                 return Ok(new
                 {
                     Message = "Password changed successfully.",
-                    DriverId = result.DriverId,
                     UserId = result.UserId,
                
                 });
@@ -81,6 +52,45 @@ namespace CSMS.Controllers
                     Errors = result.Errors
                 });
             }
+        }
+        [HttpPut("phone")]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> UpdateDriverPhone([FromBody] UpdateDriverPhoneDto dto)
+        {
+            var result = await _idriverService.UpdatePhoneByEmailAsync(dto);
+            return result.Status switch
+            {
+                DriverPhoneStatus.Updated => Ok(result.Driver),
+                DriverPhoneStatus.NotFound => NotFound(new { Message = "No driver found with this email." }),
+                DriverPhoneStatus.PhoneAlreadyUsed => Conflict(new
+                {
+                    Message = "This phone number is already used by another driver."
+                }),
+                DriverPhoneStatus.IdentityFailed => BadRequest(new { Errors = result.Errors }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        }
+        [HttpPut("me/location")]
+        [Authorize(Roles = "driver")]
+        public async Task<IActionResult> UpdateMyLocation([FromBody] UpdateDriverLocationDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+            {
+                return Unauthorized();
+            }
+
+            var result = await _idriverService.UpdateLocationAsync(userId, dto);
+            return result.Status switch
+            {
+                DriverLocationStatus.Updated => Ok(result.Location),
+                DriverLocationStatus.NotFound => NotFound(new { Message = "Driver profile not found." }),
+                DriverLocationStatus.HasActiveRequest => Conflict(new
+                {
+                    Message = "You cannot mark yourself available while you have an active emergency request."
+                }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError)
+            };
         }
     }
 }

@@ -1,5 +1,7 @@
 ﻿using CSMS.Data;
-using CSMS.Dto;
+using CSMS.Dto.AuthDto;
+using CSMS.Dto.DriversDto;
+using CSMS.Dto.EmployeeDto;
 using CSMS.Models;
 using CSMS.service.Emial;
 using CSMS.service.Token;
@@ -153,7 +155,9 @@ namespace CSMS.service.Register
                 BranchId = driverdto.BranchId,
                 Salary = driverdto.Salary,
                 StartWorkDate = driverdto.StartWorkDate,
-                UserId = user.Id
+                UserId = user.Id,
+                IsVerified = false,
+                AcceptedBy= null
             };
 
             await _context.Drivers.AddAsync(driver);

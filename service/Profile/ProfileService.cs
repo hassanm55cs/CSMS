@@ -1,5 +1,5 @@
 using CSMS.Data;
-using CSMS.Dto;
+using CSMS.Dto.CustomerDto;
 using CSMS.ViewModel;
 using Microsoft.EntityFrameworkCore;
 

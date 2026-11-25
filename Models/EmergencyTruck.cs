@@ -19,7 +19,7 @@ public partial class EmergencyTruck
 
     public int BranchId { get; set; }
 
-    public int DriverId { get; set; }
+    public int ?DriverId { get; set; }
 
     public virtual ServiceBranch Branch { get; set; } = null!;
 

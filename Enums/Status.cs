@@ -9,9 +9,11 @@ namespace CSMS.Enums
         Entered,
         UnderDIagnosis,
         DiagnosesSentToCustomer,
+        CustomerConfirmed,
         serviceApproved,
         serviceRejected,
-        servicing,
-        ended,
+        InProgress,
+        Completed,
+        Cancelled
     }
 }

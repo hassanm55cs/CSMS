@@ -1,4 +1,4 @@
-﻿using CSMS.Dto;
+﻿using CSMS.Dto.AuthDto;
 using CSMS.Models;
 using CSMS.service.Token;
 using Microsoft.AspNetCore.Identity;

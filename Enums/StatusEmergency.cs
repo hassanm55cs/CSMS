@@ -12,5 +12,8 @@ namespace CSMS.Enums
         arrived,
         tobranch,
         arrivedToBranch,
+        assigned,
+        completed,
+        cancelled,
     }
 }

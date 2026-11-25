@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using CSMS.Dto;
+using CSMS.Dto.CustomerDto;
 using CSMS.service.Profile;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

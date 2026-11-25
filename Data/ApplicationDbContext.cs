@@ -1,9 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using CSMS.Enums;
 using CSMS.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
 
 namespace CSMS.Data;
 
@@ -46,6 +47,7 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     public virtual DbSet<Visit> Visits { get; set; }
     public DbSet<Notification> Notifications{ get; set; }
+    public DbSet<Admin> Admin{ get; set; }
 
     //    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -54,6 +56,16 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<Admin>(entity =>
+        {
+           entity.HasKey(e => e.AdminId);
+            entity.HasMany(d => d.Drivers).WithOne(p => p.Admin)
+                .HasForeignKey(d => d.AcceptedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(d => d.Drivers).WithOne(p => p.Admin)
+                .HasForeignKey(d => d.RejectedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<BranchProduct>(entity =>
         {
@@ -132,7 +144,9 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.NoOfCylinders).HasColumnName("No_of_cylinders");
             entity.Property(e => e.FuelType)
            .HasConversion<string>();
-
+            entity.Property(e => e.Status)
+            .HasConversion<string>()
+             .HasDefaultValue(RentalCarStatus.Available);
             entity.Property(e => e.EngineType)
                 .HasConversion<string>();
         });
@@ -199,6 +213,7 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.ClientSetNull);
             entity.Property(e => e.StatusEmergency)
             .HasConversion<string>();
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<EmergencyTruck>(entity =>
@@ -295,6 +310,8 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(d => d.LicencsePlateRentedNavigation).WithMany(p => p.RentedCarCustomers)
                 .HasForeignKey(d => d.LicencsePlateRented)
                 .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.Property(e => e.Status)
+             .HasConversion<string>();
         });
 
         modelBuilder.Entity<Service>(entity =>
@@ -363,7 +380,7 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(d => d.EmployeeId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
             entity.Property(e => e.Status)
-         .HasConversion<string>();
+                .HasConversion<string>();
         });
         //notification
         modelBuilder.Entity<Notification>(e =>

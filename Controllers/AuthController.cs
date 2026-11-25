@@ -1,7 +1,10 @@
-﻿using CSMS.Dto;
+﻿using CSMS.Dto.AuthDto;
+using CSMS.Dto.DriversDto;
+using CSMS.Dto.EmployeeDto;
 using CSMS.service.ConfirmationEmail;
 using CSMS.service.Login;
 using CSMS.service.Register;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CSMS.Controllers
@@ -12,8 +15,8 @@ namespace CSMS.Controllers
         public class AuthController : ControllerBase
         {
             private readonly IAuthService _iauthService;
-        private readonly IEmailConfirmationService _emailConfirmationService;
-        private readonly ILoginService  _loginService;
+            private readonly IEmailConfirmationService _emailConfirmationService;
+            private readonly ILoginService  _loginService;
 
         public AuthController(IAuthService authService, IEmailConfirmationService emailConfirmationService, ILoginService loginService)
             {
@@ -86,18 +89,6 @@ namespace CSMS.Controllers
             {
                 return BadRequest("Invalid input data.");
             }
-            if ( dto.Salary <= 0 || dto.BranchId <= 0 || dto.PhoneNumber == null || dto.Password == null || dto.ConfirmPassword == null)
-            {
-                return BadRequest("Salary, BranchId, PhoneNumber, Password, and ConfirmPassword are required and must be valid.");
-            }
-            if (dto.PhoneNumber.Length > 11)
-            {
-                return BadRequest("Phone number must be 11 digits or less.");
-            }
-            if (dto.Password != dto.ConfirmPassword)
-            {
-                return BadRequest("Password and ConfirmPassword do not match.");
-            }
             var result = await _iauthService.AddDriver(dto);
             if (result.Success)
             {
@@ -118,24 +109,12 @@ namespace CSMS.Controllers
             }
 
         }
-        [HttpPost("register/employee")]
+        [HttpPost("register/employee"), Authorize(Roles ="admin")]
         public async Task<IActionResult> RigesterEmployee([FromBody] EmployeeDto dto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest("Invalid input data.");
-            }
-            if ( dto.Salary <= 0 || dto.BranchId <= 0 || dto.PhoneNumber == null || dto.Password == null || dto.ConfirmPassword == null)
-            {
-                return BadRequest("Salary, BranchId, PhoneNumber, Password, and ConfirmPassword are required and must be valid.");
-            }
-            if (dto.PhoneNumber.Length > 11)
-            {
-                return BadRequest("Phone number must be 11 digits or less.");
-            }
-            if (dto.Password != dto.ConfirmPassword)
-            {
-                return BadRequest("Password and ConfirmPassword do not match.");
             }
             var result = await _iauthService.RegisterEmployeeAsync(dto);
             if (result.Success)
@@ -156,12 +135,12 @@ namespace CSMS.Controllers
                 });
             }
         }
-        [HttpPost("/Login")]
+        [HttpPost("/Login"),AllowAnonymous]
         public async Task<IActionResult> loginAll(LoginDto dto)
         {
             if(!ModelState.IsValid)
             {
-                return BadRequest("Invalid input data entered.");
+                return BadRequest("Invalid input.");
             }
             var result = await _loginService.LoginAsync(dto);
             if(result.succsee)
@@ -180,11 +159,7 @@ namespace CSMS.Controllers
                 });
             }
         }
-        [HttpGet("get-all-users")]
-        public async Task<IActionResult> GetAllUsers()
-        {
-           return Ok("done");
-        }
+   
 
 
     }

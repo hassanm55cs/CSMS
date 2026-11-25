@@ -1,5 +1,5 @@
 using CSMS.Data;
-using CSMS.Dto;
+using CSMS.Dto.CarsDto;
 using CSMS.Enums;
 using CSMS.Models;
 using CSMS.ViewModel;
@@ -233,7 +233,7 @@ public class CarService
             service.Visit.CarId == licencePlate &&
             service.Approved &&
             (service.Visit.Status == Status.serviceApproved ||
-             service.Visit.Status == Status.servicing));
+             service.Visit.Status == Status.InProgress));
 
         if (hasVisits || hasEmergencyRequests || hasActiveServices)
         {

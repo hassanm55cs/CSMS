@@ -1,4 +1,4 @@
-﻿using CSMS.Dto;
+﻿using CSMS.Dto.AuthDto;
 
 namespace CSMS.service.Login
 {
