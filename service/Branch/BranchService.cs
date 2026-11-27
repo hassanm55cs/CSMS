@@ -69,6 +69,8 @@ namespace CSMS.service.Branch
             {
                 BranchName     = dto.BranchName,
                 BranchLocation = dto.BranchLocation,
+                Latitude       = dto.Latitude,
+                Longitude      = dto.Longitude,
                 OpenTime       = TimeOnly.Parse(dto.OpenTime),
                 CloseTime      = TimeOnly.Parse(dto.CloseTime),
                 OpeningDate    = dto.OpeningDate,
@@ -89,6 +91,8 @@ namespace CSMS.service.Branch
 
             branch.BranchName     = dto.BranchName;
             branch.BranchLocation = dto.BranchLocation;
+            branch.Latitude       = dto.Latitude;
+            branch.Longitude      = dto.Longitude;
             branch.OpenTime       = TimeOnly.Parse(dto.OpenTime);
             branch.CloseTime      = TimeOnly.Parse(dto.CloseTime);
             branch.OpeningDate    = dto.OpeningDate;
@@ -129,6 +133,8 @@ namespace CSMS.service.Branch
             BranchId      = b.BranchId,
             Name          = b.BranchName,
             Location      = b.BranchLocation,
+            Latitude      = b.Latitude,
+            Longitude     = b.Longitude,
             OpenTime      = b.OpenTime.ToString("HH:mm"),
             CloseTime     = b.CloseTime.ToString("HH:mm"),
             EmployeeCount = b.Employees?.Count ?? 0,
@@ -146,6 +152,8 @@ namespace CSMS.service.Branch
             BranchId    = b.BranchId,
             Name        = b.BranchName,
             Location    = b.BranchLocation,
+            Latitude    = b.Latitude,
+            Longitude   = b.Longitude,
             OpenTime    = b.OpenTime.ToString("HH:mm"),
             CloseTime   = b.CloseTime.ToString("HH:mm"),
             OpeningDate = b.OpeningDate,

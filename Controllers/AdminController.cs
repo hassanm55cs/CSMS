@@ -21,46 +21,6 @@ namespace CSMS.Controllers
         {
             _iadminService = adminService;
         }
-        [HttpGet("/Get-unverified-drivers")]
-        public async Task<IActionResult> GetUnverifiedDrivers([FromQuery] int ?page=1, [FromQuery] int ?pageSize=10)
-        {
-            if (page < 1) page = 1;
-            if (pageSize < 1 || pageSize > 100) pageSize = 10;
-            var drivers = await _iadminService.GetUnverifiedDriversAsync(page ?? 1, pageSize ?? 10);
-            return Ok(drivers);
-        }
-        [HttpPost("/Confirm-Driver/{driverId:int}")]
-        public async Task<IActionResult> ConfirmDriver([FromRoute] int driverId)
-        {
-            if(Owner==null)
-            {
-                return Unauthorized();
-            }
-            var (isverified, errors) = await _iadminService.ConfirmDriver(Owner, driverId);
-            if (!isverified)
-            {
-                return BadRequest(errors);
-            }
-            return Ok("Driver confirmed successfully");
-        }
-        [HttpPost("Reject-Driver/{driverid:int}")]
-        public async Task<IActionResult> RejectDriverAsync( int driverid, [FromQuery] string reason)
-        {
-            if(Owner==null)
-            {
-                return Unauthorized();
-            }
-            var rejected = await _iadminService.RejectDriver(Owner,reason, driverid);
-            
-            if(!rejected.Success)
-            {
-                return BadRequest(new
-                {
-                    items=rejected.errors,
-                });
-            }
-            return Ok($"Driverof id:{driverid} is rejected");
-        }
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard([FromQuery] AdminDashboardQueryDto query)
         {

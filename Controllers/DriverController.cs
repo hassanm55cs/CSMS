@@ -24,7 +24,29 @@ namespace CSMS.Controllers
             _changePassword = changePassword;
             _idriverService = idriverService;
         }
+        [HttpGet]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> GetDrivers([FromQuery] DriverListQueryDto query)
+        {
+            return Ok(await _idriverService.GetDriversAsync(query));
+        }
+
+        [HttpGet("me")]
+        [Authorize(Roles = "driver")]
+        public async Task<IActionResult> GetMe()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId is null)
+            {
+                return Unauthorized();
+            }
+
+            var driver = await _idriverService.GetMeAsync(userId);
+            return driver is null ? NotFound(new { Message = "Driver profile not found." }) : Ok(driver);
+        }
+
         [HttpPut("change-password")]
+        [Authorize(Roles = "driver")]
         public async Task<IActionResult> UpdateDriverAsync([FromBody] ChangePasswordDto dto)
         {
            if(!ModelState.IsValid)

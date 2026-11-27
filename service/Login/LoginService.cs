@@ -34,9 +34,9 @@ namespace CSMS.service.Login
             if (await _userManager.IsInRoleAsync(user, "driver"))
             {
                 var driver = await _context.Drivers.AsNoTracking().FirstOrDefaultAsync(d => d.UserId == user.Id);
-                if (driver is null || !driver.IsVerified)
+                if (driver is null)
                 {
-                    return (false, "Your driver account is waiting for administrator approval.", null);
+                    return (false, "Driver profile not found.", null);
                 }
             }
             var token =  await _itokenService.GenerateJwtTokenAsync(user);

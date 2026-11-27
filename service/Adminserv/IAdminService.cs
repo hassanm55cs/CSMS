@@ -10,9 +10,6 @@ namespace CSMS.service.Adminserv
   
     public interface IAdminService
     {
-        Task<PagedResult<DriverResponse>> GetUnverifiedDriversAsync(int page,int pageSize);
-        Task<(bool Success, string[] errors)> ConfirmDriver(string adminId,int DriverId);
-        Task<(bool Success, string[] errors)> RejectDriver(string adminId,string ?reason, int DriverId);
         Task<IReadOnlyList<BranchReportRowViewModel>> GetBranchReportAsync(AdminDateRangeQueryDto query);
       
         Task<List<RevenueRow>> LoadRevenueRowsAsync(DateOnly from, DateOnly to, int? branchId);

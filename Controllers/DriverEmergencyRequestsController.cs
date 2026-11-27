@@ -14,11 +14,23 @@ namespace CSMS.Controllers;
 [Authorize(Roles = "driver")]
 public class DriverEmergencyRequestsController : ControllerBase
 {
-    private readonly EmergencyService _emergencyService;
+    private readonly IEmergencyService _emergencyService;
 
-    public DriverEmergencyRequestsController(EmergencyService emergencyService)
+    public DriverEmergencyRequestsController(IEmergencyService emergencyService)
     {
         _emergencyService = emergencyService;
+    }
+
+    [HttpGet("trucks")]
+    public async Task<IActionResult> GetAvailableTrucks()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        return Ok(new { Data = await _emergencyService.GetAvailableBranchTrucksAsync(userId) });
     }
 
     [HttpGet]
@@ -74,7 +86,7 @@ public class DriverEmergencyRequestsController : ControllerBase
     [HttpPost("{emergencyRequestId:int}/accept")]
     public async Task<IActionResult> AcceptEmergencyRequest(
         int emergencyRequestId,
-        [FromBody] AcceptEmergencyDto dto)
+        [FromBody] AcceptEmergencyDto? dto = null)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (userId is null)
@@ -83,7 +95,7 @@ public class DriverEmergencyRequestsController : ControllerBase
         }
 
         var result = await _emergencyService.AcceptAsync(
-            emergencyRequestId, userId, dto.TruckLicencePlate);
+            emergencyRequestId, userId, dto?.TruckLicencePlate);
         return result.ToActionResult(this, request => Ok(new
         {
             RequestId = request.EmergencyRequestId,

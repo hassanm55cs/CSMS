@@ -27,6 +27,8 @@ public class EmergencyDriverViewModel
     public int DriverId { get; set; }
 
     public string FullName { get; set; } = null!;
+
+    public string? PhoneNumber { get; set; }
 }
 
 public class EmergencyTruckSummaryViewModel
@@ -72,6 +74,8 @@ public class EmergencyRequestViewModel
 
     public EmergencyTruckSummaryViewModel? Truck { get; set; }
 
+    public DriverEmergencyBranchViewModel? Branch { get; set; }
+
     // Live location: only returned while the driver is actively heading to / at the customer.
     public LocationViewModel? DriverLocation { get; set; }
 
@@ -110,6 +114,10 @@ public class DriverEmergencyBranchViewModel
     public int BranchId { get; set; }
 
     public string BranchName { get; set; } = null!;
+
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
 }
 
 public class DriverEmergencyRequestViewModel

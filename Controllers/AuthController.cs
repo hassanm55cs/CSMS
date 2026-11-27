@@ -6,6 +6,7 @@ using CSMS.service.Login;
 using CSMS.service.Register;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CSMS.Controllers
 {
@@ -82,22 +83,24 @@ namespace CSMS.Controllers
             return Ok("Confirmation email sent successfully.");
         }
 
-        [HttpPost("register/Driver")]
+        [HttpPost("register/Driver"), Authorize(Roles = "admin")]
         public async Task<IActionResult> AddDriverAsync([FromBody] DriverDto dto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest("Invalid input data.");
+                return BadRequest(ModelState);
             }
-            var result = await _iauthService.AddDriver(dto);
+            var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var result = await _iauthService.AddDriver(dto, adminUserId);
             if (result.Success)
             {
-                return Ok(new
+                return StatusCode(201, new
                 {
-                    Message = "Driver added successfully.",
+                    Message = "Driver account created successfully.",
                     DriverId = result.DriverId,
                     UserId = result.UserId,
-                    Token = result.Token
+                    Email = dto.Email.Trim(),
+                    DefaultPassword = result.DefaultPassword
                 });
             }
             else

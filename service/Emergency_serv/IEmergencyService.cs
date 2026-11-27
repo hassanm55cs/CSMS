@@ -14,6 +14,7 @@ namespace CSMS.service.Emergency_serv
         Task<EmergencyResult> CancelAsync(int emergencyRequestId, string userId, bool isAdmin, string? reason);
         Task<PagedViewModel<DriverEmergencyRequestViewModel>> GetDriverRequestsAsync(string userId, EmergencyRequestListQueryDto query, bool? assigned, int? branchId);
         Task<DriverEmergencyRequestViewModel?> GetDriverRequestAsync(int emergencyRequestId, string userId);
-        Task<EmergencyResult> AcceptAsync(int emergencyRequestId,string userId,string truckLicencePlate);
+        Task<EmergencyResult> AcceptAsync(int emergencyRequestId, string userId, string? truckLicencePlate);
+        Task<List<EmergencyTruckSummaryViewModel>> GetAvailableBranchTrucksAsync(string userId);
     }
 }

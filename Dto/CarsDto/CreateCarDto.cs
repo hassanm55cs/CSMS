@@ -29,9 +29,9 @@ public class CreateCarDto
     [Required, MaxLength(20)]
     public string Model { get; set; } = null!;
 
-    [Required, Range(0, double.MaxValue)]
-    public double? PriceInEgp { get; set; }
-
     [Required, Range(0, int.MaxValue)]
     public int? CurrentKm { get; set; }
+
+    [Range(0, double.MaxValue)]
+    public double? PriceInEgp { get; set; }
 }

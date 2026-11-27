@@ -11,6 +11,10 @@ public partial class ServiceBranch
 
     public string BranchLocation { get; set; } = null!;
 
+    public double? Latitude { get; set; }
+
+    public double? Longitude { get; set; }
+
     public TimeOnly OpenTime { get; set; }
 
     public TimeOnly CloseTime { get; set; }

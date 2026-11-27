@@ -105,37 +105,54 @@ namespace CSMS.service.Register
         }
 
         
-        //driver registration
-        public async Task<(bool Success,string[] Errors,int? DriverId,string? UserId, string? Token)> AddDriver(DriverDto driverdto)
+        // Admin-created driver account with configured default password
+        public async Task<(bool Success, string[] Errors, int? DriverId, string? UserId, string? DefaultPassword)> AddDriver(DriverDto driverdto, string? adminUserId = null)
         {
+            var email = driverdto.Email.Trim();
+            var phone = driverdto.PhoneNumber.Trim();
+            var fullName = driverdto.FullName.Trim();
+
+            if (!await _context.ServiceBranches.AnyAsync(b => b.BranchId == driverdto.BranchId))
+            {
+                return (false, new[] { "The selected branch does not exist." }, 0, null, null);
+            }
+
             // Check if email is already registered in Identity
-            if (await _userManager.FindByEmailAsync(driverdto.Email) != null)
+            if (await _userManager.FindByEmailAsync(email) != null)
             {
                 return (false, new[] { "Email is already registered." }, 0, null, null);
             }
 
             // Check if email or phone already exists in Drivers
             if (await _context.Drivers.AnyAsync(c =>
-                c.Email == driverdto.Email ||
-                c.PhoneNumber == driverdto.PhoneNumber))
+                c.Email == email ||
+                c.PhoneNumber == phone))
             {
                 return (false, new[]
                 {
-            "A Driver with this email or phone already exists." }, 0, null, null);
+                    "A driver with this email or phone already exists."
+                }, 0, null, null);
+            }
+
+            var defaultPassword = _configuration["DriverSettings:DefaultPassword"];
+            if (string.IsNullOrWhiteSpace(defaultPassword))
+            {
+                defaultPassword = "Driver@123";
             }
 
             var user = new ApplicationUser
             {
-                UserName = driverdto.Email,
-                Email = driverdto.Email,
-                PhoneNumber = driverdto.PhoneNumber
+                UserName = email,
+                Email = email,
+                PhoneNumber = phone,
+                EmailConfirmed = true
             };
 
-            var createResult = await _userManager.CreateAsync(user, driverdto.Password);
+            var createResult = await _userManager.CreateAsync(user, defaultPassword);
 
             if (!createResult.Succeeded)
             {
-                return (false, createResult.Errors.Select(e => e.Description).ToArray(),  0, null,null);
+                return (false, createResult.Errors.Select(e => e.Description).ToArray(), 0, null, null);
             }
 
             var roleResult = await _userManager.AddToRoleAsync(user, "driver");
@@ -143,38 +160,38 @@ namespace CSMS.service.Register
             if (!roleResult.Succeeded)
             {
                 await _userManager.DeleteAsync(user);
-
-                return (false,  roleResult.Errors.Select(e => e.Description).ToArray(),   0, null,  null);
+                return (false, roleResult.Errors.Select(e => e.Description).ToArray(), 0, null, null);
             }
 
             var driver = new Driver
             {
-                FullName = driverdto.FullName,
-                Email = driverdto.Email,
-                PhoneNumber = driverdto.PhoneNumber,
+                FullName = fullName,
+                Email = email,
+                PhoneNumber = phone,
                 BranchId = driverdto.BranchId,
-                Salary = 0,
+                Salary = driverdto.Salary,
                 StartWorkDate = driverdto.StartWorkDate,
-                UserId = user.Id,
-                IsVerified = false,
-                AcceptedBy= null
+                IsAvailable = true,
+                UserId = user.Id
             };
 
-            await _context.Drivers.AddAsync(driver);
-            await _context.SaveChangesAsync();
-
-            // Generate JWT
-            var token = await _tokenService.GenerateJwtTokenAsync(user);
-
-            // Convert JwtSecurityToken to string
-            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+            try
+            {
+                await _context.Drivers.AddAsync(driver);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                await _userManager.DeleteAsync(user);
+                return (false, new[] { "A driver with this email or phone already exists." }, 0, null, null);
+            }
 
             return (
                 true,
                 Array.Empty<string>(),
                 driver.DriverId,
                 user.Id,
-                tokenString);
+                defaultPassword);
         }
         public async Task<(bool Success, string[] Errors, int? CustomerId, string? UserId, string? Token)> RegisterEmployeeAsync(EmployeeDto dto)
         {

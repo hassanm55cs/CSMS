@@ -21,65 +21,6 @@ namespace CSMS.service.Adminserv
         {
             _context = context ;
         }
-        public async Task<(bool Success, string[] errors)> ConfirmDriver(string adminId, int DriverId)
-        {
-            var driver = await _context.Drivers.FirstOrDefaultAsync(d => d.DriverId == DriverId);
-            var admin = await _context.Admin.FirstOrDefaultAsync(a => a.UserId == adminId);
-            if (driver is null)
-            {
-                return (false, new string[] { "Driver not found" });
-            }
-            if (admin is null)
-            {
-                return (false, new string[] { "Admin not found" });
-            }
-            driver.IsVerified = true;
-            driver.AcceptedBy = admin.AdminId;
-            await _context.SaveChangesAsync();
-            return (true, Array.Empty<string>());
-
-        }
-
-        public async Task<PagedResult<DriverResponse>> GetUnverifiedDriversAsync(int page, int pageSize)
-        {
-            var Drivers = await _context.Drivers.Where(d => d.IsVerified == false)
-                .Select(d => new DriverResponse
-            {
-                Fullname = d.FullName,
-                Email = d.Email,
-                PhoneNumber = d.PhoneNumber,
-                Salary = d.Salary,
-                BranchId = d.BranchId,
-                DriverId = d.DriverId
-            }).ToListAsync();
-            var totalCount = Drivers.Count();
-            var pagedDrivers = Drivers.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            return new PagedResult<DriverResponse>
-            {
-                Page = page,
-                PageSize = pageSize,
-                TotalCount = totalCount,
-                Data = pagedDrivers
-            };
-        }
-
-        public async Task<(bool Success, string[] errors)> RejectDriver(string adminId, string? reason, int DriverId)
-        {
-            var driver = await _context.Drivers.FirstOrDefaultAsync(d => d.DriverId == DriverId);
-            if (driver is null)
-            {
-                return (false, new string[] { "Driver not found" });
-            }
-            var admin = await _context.Admin.FirstOrDefaultAsync(a => a.UserId == adminId);
-            if (admin is null)
-            {
-                return (false, new string[] { "Admin not found" });
-            }
-            driver.IsVerified = false;
-            driver.RejectedBy = admin.AdminId;
-            await _context.SaveChangesAsync();
-            return (true, Array.Empty<string>());
-        }
         public async Task<AdminDashboardViewModel> GetDashboardAsync(AdminDashboardQueryDto query)
         {
             var (from, to) = ResolveRange(query, 30);

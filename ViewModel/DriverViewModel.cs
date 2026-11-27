@@ -18,6 +18,12 @@ public class DriverViewModel
 
     public int BranchId { get; set; }
 
+    public string? BranchName { get; set; }
+
+    public double? BranchLatitude { get; set; }
+
+    public double? BranchLongitude { get; set; }
+
     public double? Latitude { get; set; }
 
     public double? Longitude { get; set; }

@@ -2,8 +2,10 @@ using CSMS.Data;
 using CSMS.Dto;
 using CSMS.Enums;
 using CSMS.Helper;
+using CSMS.Hubs;
 using CSMS.Models;
 using CSMS.ViewModel;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CSMS.service.Emergency_serv;
@@ -11,10 +13,12 @@ namespace CSMS.service.Emergency_serv;
 public class EmergencyService:IEmergencyService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IHubContext<NotificationHub> _notificationHub;
 
-    public EmergencyService(ApplicationDbContext context)
+    public EmergencyService(ApplicationDbContext context, IHubContext<NotificationHub> notificationHub)
     {
         _context = context;
+        _notificationHub = notificationHub;
     }
 
     // ------------------------------------------------------------------
@@ -62,10 +66,13 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.DuplicateActiveRequest);
         }
 
+        var nearestBranchId = await FindNearestBranchIdAsync(latitude, longitude);
+
         var now = DateTime.UtcNow;
         var emergencyRequest = new EmergencyRequest
         {
             CarLicencePlate = licencePlate,
+            BranchId = nearestBranchId,
             ProblemType = problemType,
             Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
             Latitude = GeoHelper.Format(latitude),
@@ -78,7 +85,13 @@ public class EmergencyService:IEmergencyService
         _context.EmergencyRequests.Add(emergencyRequest);
         await _context.SaveChangesAsync();
 
-        return await LoadResultAsync(emergencyRequest.EmergencyRequestId);
+        var result = await LoadResultAsync(emergencyRequest.EmergencyRequestId);
+        if (result.Request is not null)
+        {
+            await BroadcastEmergencyAsync("EmergencyRequestCreated", result.Request, userId, nearestBranchId);
+        }
+
+        return result;
     }
 
     public async Task<PagedViewModel<EmergencyRequestViewModel>> GetMyRequestsAsync(
@@ -196,6 +209,7 @@ public class EmergencyService:IEmergencyService
         }
 
         request.DriverId = driver.DriverId;
+        request.BranchId ??= driver.BranchId;
         request.TruckLicencePlate = truck.LicencePlate;
         request.StatusEmergency = StatusEmergency.assigned;
         request.UpdatedAt = DateTime.UtcNow;
@@ -207,7 +221,14 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.Conflict);
         }
 
-        return await LoadResultAsync(emergencyRequestId);
+        var result = await LoadResultAsync(emergencyRequestId);
+        if (result.Request is not null)
+        {
+            var customerUserId = await GetCustomerUserIdAsync(emergencyRequestId);
+            await BroadcastEmergencyAsync("EmergencyRequestUpdated", result.Request, customerUserId, request.BranchId ?? driver.BranchId);
+        }
+
+        return result;
     }
 
     // ------------------------------------------------------------------
@@ -278,7 +299,14 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.Conflict);
         }
 
-        return await LoadResultAsync(emergencyRequestId);
+        var result = await LoadResultAsync(emergencyRequestId);
+        if (result.Request is not null)
+        {
+            var customerUserId = await GetCustomerUserIdAsync(emergencyRequestId);
+            await BroadcastEmergencyAsync("EmergencyRequestUpdated", result.Request, customerUserId, request.BranchId ?? request.Driver.BranchId);
+        }
+
+        return result;
     }
 
     public async Task<EmergencyResult> CancelAsync(
@@ -322,7 +350,17 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.Conflict);
         }
 
-        return await LoadResultAsync(emergencyRequestId);
+        var result = await LoadResultAsync(emergencyRequestId);
+        if (result.Request is not null)
+        {
+            await BroadcastEmergencyAsync(
+                "EmergencyRequestUpdated",
+                result.Request,
+                request.CarLicencePlateNavigation.Customer.UserId,
+                request.BranchId ?? request.Driver?.BranchId);
+        }
+
+        return result;
     }
 
     // ------------------------------------------------------------------
@@ -335,6 +373,12 @@ public class EmergencyService:IEmergencyService
         bool? assigned,
         int? branchId)
     {
+        var driverBranchId = await _context.Drivers
+            .AsNoTracking()
+            .Where(driver => driver.UserId == userId)
+            .Select(driver => (int?)driver.BranchId)
+            .SingleOrDefaultAsync();
+
         var requests = RequestsWithDetails().AsNoTracking();
 
         requests = assigned switch
@@ -342,18 +386,22 @@ public class EmergencyService:IEmergencyService
             true => requests.Where(request =>
                 request.Driver != null && request.Driver.UserId == userId),
             false => requests.Where(request =>
-                request.DriverId == null && request.StatusEmergency == StatusEmergency.requested),
+                request.DriverId == null &&
+                request.StatusEmergency == StatusEmergency.requested &&
+                (request.BranchId == null || (driverBranchId.HasValue && request.BranchId == driverBranchId.Value))),
             _ => requests.Where(request =>
-                (request.DriverId == null && request.StatusEmergency == StatusEmergency.requested) ||
+                (request.DriverId == null &&
+                 request.StatusEmergency == StatusEmergency.requested &&
+                 (request.BranchId == null || (driverBranchId.HasValue && request.BranchId == driverBranchId.Value))) ||
                 (request.Driver != null && request.Driver.UserId == userId))
         };
 
-        // Open requests have no branch yet, so they stay visible; assigned ones match the driver's branch.
         if (branchId.HasValue)
         {
             var branch = branchId.Value;
             requests = requests.Where(request =>
-                request.Driver == null || request.Driver.BranchId == branch);
+                request.BranchId == branch ||
+                (request.Driver != null && request.Driver.BranchId == branch));
         }
 
         requests = ApplyFilters(requests, query);
@@ -375,26 +423,59 @@ public class EmergencyService:IEmergencyService
         };
     }
 
-    // A driver can open the open pool or their own requests, nothing else.
+    // A driver can open their nearest-branch open pool or their own requests, nothing else.
     public async Task<DriverEmergencyRequestViewModel?> GetDriverRequestAsync(
         int emergencyRequestId,
         string userId)
     {
+        var driverBranchId = await _context.Drivers
+            .AsNoTracking()
+            .Where(driver => driver.UserId == userId)
+            .Select(driver => (int?)driver.BranchId)
+            .SingleOrDefaultAsync();
+
         var request = await RequestsWithDetails()
             .AsNoTracking()
             .Where(item =>
                 item.EmergencyRequestId == emergencyRequestId &&
-                ((item.DriverId == null && item.StatusEmergency == StatusEmergency.requested) ||
+                ((item.DriverId == null &&
+                  item.StatusEmergency == StatusEmergency.requested &&
+                  (item.BranchId == null || (driverBranchId.HasValue && item.BranchId == driverBranchId.Value))) ||
                  (item.Driver != null && item.Driver.UserId == userId)))
             .SingleOrDefaultAsync();
 
         return request is null ? null : ToDriverViewModel(request, userId);
     }
 
+    public async Task<List<EmergencyTruckSummaryViewModel>> GetAvailableBranchTrucksAsync(string userId)
+    {
+        var driver = await _context.Drivers
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.UserId == userId);
+        if (driver is null)
+        {
+            return [];
+        }
+
+        var trucks = await _context.EmergencyTrucks
+            .AsNoTracking()
+            .Where(t => t.BranchId == driver.BranchId && t.IsAvailable)
+            .OrderByDescending(t => t.DriverId == driver.DriverId)
+            .ThenBy(t => t.LicencePlate)
+            .ToListAsync();
+
+        return trucks.Select(t => new EmergencyTruckSummaryViewModel
+        {
+            LicencePlate = t.LicencePlate,
+            TruckCompany = t.TruckCompany,
+            TruckModel = t.TruckModel
+        }).ToList();
+    }
+
     public async Task<EmergencyResult> AcceptAsync(
         int emergencyRequestId,
         string userId,
-        string truckLicencePlate)
+        string? truckLicencePlate)
     {
         var driver = await _context.Drivers
             .SingleOrDefaultAsync(item => item.UserId == userId);
@@ -415,36 +496,57 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.NotAssignable);
         }
 
+        if (request.BranchId.HasValue && request.BranchId.Value != driver.BranchId)
+        {
+            return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
+        }
+
         if (driver.IsAvailable != true ||
             await HasActiveRequestAsync(driver.DriverId, emergencyRequestId))
         {
             return new EmergencyResult(EmergencyResultStatus.DriverUnavailable);
         }
 
-        var truckPlate = truckLicencePlate.Trim();
-        var truck = await _context.EmergencyTrucks
-            .SingleOrDefaultAsync(item => item.LicencePlate == truckPlate);
-        if (truck is null)
+        EmergencyTruck? truck = null;
+        if (!string.IsNullOrWhiteSpace(truckLicencePlate))
         {
-            return new EmergencyResult(EmergencyResultStatus.TruckNotFound);
-        }
+            var truckPlate = truckLicencePlate.Trim();
+            truck = await _context.EmergencyTrucks
+                .SingleOrDefaultAsync(item => item.LicencePlate == truckPlate);
+            if (truck is null)
+            {
+                return new EmergencyResult(EmergencyResultStatus.TruckNotFound);
+            }
 
-        if (!truck.IsAvailable)
-        {
-            return new EmergencyResult(EmergencyResultStatus.TruckUnavailable);
-        }
+            if (!truck.IsAvailable)
+            {
+                return new EmergencyResult(EmergencyResultStatus.TruckUnavailable);
+            }
 
-        if (truck.BranchId != driver.BranchId)
+            if (truck.BranchId != driver.BranchId)
+            {
+                return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
+            }
+        }
+        else
         {
-            return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
+            truck = await _context.EmergencyTrucks
+                .Where(item => item.BranchId == driver.BranchId && item.IsAvailable)
+                .OrderByDescending(item => item.DriverId == driver.DriverId)
+                .ThenBy(item => item.LicencePlate)
+                .FirstOrDefaultAsync();
         }
 
         request.DriverId = driver.DriverId;
-        request.TruckLicencePlate = truck.LicencePlate;
+        request.BranchId ??= driver.BranchId;
+        request.TruckLicencePlate = truck?.LicencePlate;
         request.StatusEmergency = StatusEmergency.assigned;
         request.UpdatedAt = DateTime.UtcNow;
         driver.IsAvailable = false;
-        truck.IsAvailable = false;
+        if (truck is not null)
+        {
+            truck.IsAvailable = false;
+        }
 
         // RowVersion makes sure only one driver wins if two accept at the same time.
         if (!await TrySaveAsync())
@@ -452,7 +554,14 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.Conflict);
         }
 
-        return await LoadResultAsync(emergencyRequestId);
+        var result = await LoadResultAsync(emergencyRequestId);
+        if (result.Request is not null)
+        {
+            var customerUserId = await GetCustomerUserIdAsync(emergencyRequestId);
+            await BroadcastEmergencyAsync("EmergencyRequestUpdated", result.Request, customerUserId, request.BranchId ?? driver.BranchId);
+        }
+
+        return result;
     }
 
     // ------------------------------------------------------------------
@@ -464,9 +573,60 @@ public class EmergencyService:IEmergencyService
         return _context.EmergencyRequests
             .Include(request => request.CarLicencePlateNavigation)
                 .ThenInclude(car => car.Customer)
+            .Include(request => request.Branch)
             .Include(request => request.Driver)
                 .ThenInclude(driver => driver!.Branch)
             .Include(request => request.Truck);
+    }
+
+    private async Task<int?> FindNearestBranchIdAsync(double latitude, double longitude)
+    {
+        var branches = await _context.ServiceBranches
+            .AsNoTracking()
+            .Where(b => b.Latitude.HasValue && b.Longitude.HasValue)
+            .Select(b => new { b.BranchId, Latitude = b.Latitude!.Value, Longitude = b.Longitude!.Value })
+            .ToListAsync();
+
+        if (branches.Count == 0)
+        {
+            return null;
+        }
+
+        return branches
+            .OrderBy(b => GeoHelper.DistanceKm(latitude, longitude, b.Latitude, b.Longitude))
+            .ThenBy(b => b.BranchId)
+            .First()
+            .BranchId;
+    }
+
+    private Task<string?> GetCustomerUserIdAsync(int emergencyRequestId)
+    {
+        return _context.EmergencyRequests
+            .AsNoTracking()
+            .Where(r => r.EmergencyRequestId == emergencyRequestId)
+            .Select(r => r.CarLicencePlateNavigation.Customer.UserId)
+            .FirstOrDefaultAsync();
+    }
+
+    private async Task BroadcastEmergencyAsync(
+        string eventName,
+        EmergencyRequestViewModel payload,
+        string? customerUserId,
+        int? branchId)
+    {
+        if (!string.IsNullOrWhiteSpace(customerUserId))
+        {
+            await _notificationHub.Clients
+                .Group(NotificationHub.GroupName(customerUserId))
+                .SendAsync(eventName, payload);
+        }
+
+        if (branchId.HasValue)
+        {
+            await _notificationHub.Clients
+                .Group(NotificationHub.BranchGroupName(branchId.Value))
+                .SendAsync(eventName, payload);
+        }
     }
 
     public static IQueryable<EmergencyRequest> ApplyFilters(
@@ -549,11 +709,29 @@ public class EmergencyService:IEmergencyService
         };
     }
 
-    private static EmergencyDriverViewModel? ToDriverSummary(Driver? driver)
+    private static EmergencyDriverViewModel? ToDriverSummary(Driver? driver, bool includePhone = false)
     {
         return driver is null
             ? null
-            : new EmergencyDriverViewModel { DriverId = driver.DriverId, FullName = driver.FullName };
+            : new EmergencyDriverViewModel
+            {
+                DriverId = driver.DriverId,
+                FullName = driver.FullName,
+                PhoneNumber = includePhone ? driver.PhoneNumber : null
+            };
+    }
+
+    private static DriverEmergencyBranchViewModel? ToBranchSummary(ServiceBranch? branch)
+    {
+        return branch is null
+            ? null
+            : new DriverEmergencyBranchViewModel
+            {
+                BranchId = branch.BranchId,
+                BranchName = branch.BranchName,
+                Latitude = branch.Latitude,
+                Longitude = branch.Longitude
+            };
     }
 
     private static EmergencyTruckSummaryViewModel? ToTruckSummary(EmergencyTruck? truck)
@@ -609,8 +787,9 @@ public class EmergencyService:IEmergencyService
             Status = request.StatusEmergency.ToApiName(),
             UpdatedAt = request.UpdatedAt,
             Car = ToCarViewModel(request.CarLicencePlateNavigation),
-            Driver = ToDriverSummary(request.Driver),
+            Driver = ToDriverSummary(request.Driver, includePhone: isLive),
             Truck = ToTruckSummary(request.Truck),
+            Branch = ToBranchSummary(request.Branch ?? request.Driver?.Branch),
             DriverLocation = driverLocation,
             EtaMinutes = etaMinutes,
             CancelledAt = request.CancelledAt,
@@ -644,13 +823,7 @@ public class EmergencyService:IEmergencyService
             Car = ToCarViewModel(request.CarLicencePlateNavigation),
             Driver = ToDriverSummary(request.Driver),
             Truck = ToTruckSummary(request.Truck),
-            Branch = request.Driver?.Branch is null
-                ? null
-                : new DriverEmergencyBranchViewModel
-                {
-                    BranchId = request.Driver.Branch.BranchId,
-                    BranchName = request.Driver.Branch.BranchName
-                },
+            Branch = ToBranchSummary(request.Branch ?? request.Driver?.Branch),
             UpdatedAt = request.UpdatedAt
         };
     }

@@ -58,13 +58,7 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<Admin>(entity =>
         {
-           entity.HasKey(e => e.AdminId);
-            entity.HasMany(d => d.Drivers).WithOne(p => p.Admin)
-                .HasForeignKey(d => d.AcceptedBy)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasMany(d => d.Drivers).WithOne(p => p.Admin)
-                .HasForeignKey(d => d.RejectedBy)
-                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasKey(e => e.AdminId);
         });
 
         modelBuilder.Entity<BranchProduct>(entity =>
@@ -201,6 +195,8 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.DriverId, "IX_EmergencyRequests_DriverId");
 
+            entity.HasIndex(e => e.BranchId, "IX_EmergencyRequests_BranchId");
+
             entity.Property(e => e.CarLicencePlate)
                 .HasMaxLength(6)
                 .HasColumnName("Car_LicencePlate");
@@ -210,6 +206,9 @@ public partial class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasOne(d => d.Driver).WithMany(p => p.EmergencyRequests)
                 .HasForeignKey(d => d.DriverId)
+                .OnDelete(DeleteBehavior.ClientSetNull);
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
             entity.Property(e => e.StatusEmergency)
             .HasConversion<string>();

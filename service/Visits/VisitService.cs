@@ -51,11 +51,10 @@ namespace CSMS.service.Visits
             if (productIds.Distinct().Count() != productIds.Count)
                 throw new InvalidOperationException("Duplicate service products are not allowed.");
 
-            var availableProductIds = await _context.BranchProducts
-                .AsNoTracking()
+            var branchProducts = await _context.BranchProducts
                 .Where(bp => bp.BranchId == dto.BranchId && productIds.Contains(bp.ProductId) && bp.Quantity > 0)
-                .Select(bp => bp.ProductId)
                 .ToListAsync();
+            var availableProductIds = branchProducts.Select(bp => bp.ProductId).ToList();
             var unavailableProductIds = productIds.Except(availableProductIds).ToList();
             if (unavailableProductIds.Count > 0)
                 throw new InvalidOperationException(
@@ -66,26 +65,31 @@ namespace CSMS.service.Visits
             if (dto.ServiceDate < today)
                 throw new InvalidOperationException("Service date must not be in the past.");
 
-            // 4. No existing open visit for the same car on the same date
+            // 4. No existing open visit for the same car
             var conflictExists = await _context.Visits.AnyAsync(v =>
                 v.CarId == dto.CarLicencePlate &&
-                //v.ServiceDate == dto.ServiceDate &&
-                v.Status != Status.Completed);
+                v.Status != Status.Completed &&
+                v.Status != Status.Cancelled);
             if (conflictExists)
                 throw new InvalidOperationException(
                     $"Car '{dto.CarLicencePlate}' already has an open visit on {dto.ServiceDate}.");
 
-            // Create Visit — EmployeeId = 1 (placeholder; assign later via PUT /visits/{id}/assignment)
+            // Reserve 1 unit of each selected product from the branch inventory
+            foreach (var bp in branchProducts)
+            {
+                bp.Quantity -= 1;
+            }
+
+            // Create Visit — EmployeeId = null until assigned via PUT /visits/{id}/assignment
             var visit = new Visit
             {
                 CarId       = dto.CarLicencePlate,
                 BranchId    = dto.BranchId,
-                //EmployeeId  = null,   // temporary placeholder
                 ServiceDate = dto.ServiceDate,
                 Status      = Status.Entered,
             };
             _context.Visits.Add(visit);
-            await _context.SaveChangesAsync();  // get VisitId
+            await _context.SaveChangesAsync();  // get VisitId and persist stock reservation
 
             // Create one initial Service record for each product chosen by the customer.
             var services = productIds.Select(productId => new Service
@@ -182,16 +186,25 @@ namespace CSMS.service.Visits
         /// <inheritdoc/>
         public async Task<BookingResponseDto?> CancelBookingAsync(string customerId, int visitId, string? reason)
         {
-            var visit = await _context.Visits.FirstOrDefaultAsync(v => v.VisitId == visitId 
-            && 
-            v.Car.Customer.UserId == customerId
-            && 
-            (v.Status != Status.Cancelled||v.Status!=Status.Completed));
+            var visit = await _context.Visits
+                .Include(v => v.Services)
+                .FirstOrDefaultAsync(v =>
+                    v.VisitId == visitId &&
+                    v.Car.Customer.UserId == customerId &&
+                    v.Status != Status.Cancelled &&
+                    v.Status != Status.Completed);
             if (visit is null) return null;
 
-            // Use Status.ended to represent cancellation (no dedicated Cancelled enum value exists).
-            visit.Status = Status.Cancelled;//cancelled the visit
+            // Restock every approved/reserved product back to the branch inventory
+            var reservedProductIds = visit.Services
+                .Where(s => s.Approved)
+                .Select(s => s.ProductId)
+                .ToList();
+            await RestockBranchStockAsync(visit.BranchId, reservedProductIds);
+
+            visit.Status = Status.Cancelled;
             await _context.SaveChangesAsync();
+            await NotifyVisitStatusChangedAsync(customerId, visit.VisitId, visit.Status);
 
             // Optionally attach cancellation reason as a service note
             if (!string.IsNullOrWhiteSpace(reason))
@@ -282,6 +295,7 @@ namespace CSMS.service.Visits
         {
             var visit = await _context.Visits
                 .Include(v => v.Car)
+                    .ThenInclude(c => c.Customer)
                 .Include(v => v.Branch)
                 .Include(v => v.Employee)
                 .Include(v => v.Services)
@@ -304,6 +318,7 @@ namespace CSMS.service.Visits
             visit.EmployeeId = employee.EmployeeId;
             visit.Status = Status.UnderDIagnosis;
             await _context.SaveChangesAsync();
+            await NotifyVisitStatusChangedAsync(visit.Car?.Customer?.UserId, visit.VisitId, visit.Status);
 
             // Reload the navigation property for the response
             await _context.Entry(visit).Reference(v => v.Employee).LoadAsync();
@@ -322,6 +337,7 @@ namespace CSMS.service.Visits
 
             var visit = await _context.Visits
                 .Include(v => v.Car)
+                    .ThenInclude(c => c.Customer)
                 .Include(v => v.Branch)
                 .Include(v => v.Employee)
                 .Include(v => v.Services)
@@ -329,8 +345,23 @@ namespace CSMS.service.Visits
 
             if (visit is null) return null;
 
+            bool statusChanged = visit.Status != newStatus.Value;
+            if (newStatus.Value == Status.Cancelled &&
+                visit.Status != Status.Cancelled &&
+                visit.Status != Status.Completed)
+            {
+                var reservedProductIds = visit.Services
+                    .Where(s => s.Approved)
+                    .Select(s => s.ProductId)
+                    .ToList();
+                await RestockBranchStockAsync(visit.BranchId, reservedProductIds);
+            }
+
             visit.Status = newStatus.Value;
             await _context.SaveChangesAsync();
+
+            if (statusChanged)
+                await NotifyVisitStatusChangedAsync(visit.Car?.Customer?.UserId, visit.VisitId, visit.Status);
 
             return MapToListItem(visit);
         }
@@ -403,6 +434,7 @@ namespace CSMS.service.Visits
             }
 
             await _context.SaveChangesAsync();
+            await NotifyVisitStatusChangedAsync(visit.Car?.Customer?.UserId, visit.VisitId, visit.Status);
             await NotifyCustomerDiagnosisReadyAsync(visit);
 
             // Load products for the response
@@ -446,6 +478,19 @@ namespace CSMS.service.Visits
 
             
 
+            var newlyApprovedProductIds = visit.Services
+                .Where(svc => !svc.Approved && dto.ApprovedServiceIds.Contains(svc.ServiceId))
+                .Select(svc => svc.ProductId)
+                .ToList();
+
+            var newlyRejectedReservedProductIds = visit.Services
+                .Where(svc => svc.Approved && dto.RejectedServiceIds.Contains(svc.ServiceId))
+                .Select(svc => svc.ProductId)
+                .ToList();
+
+            await ReserveBranchStockAsync(visit.BranchId, newlyApprovedProductIds);
+            await RestockBranchStockAsync(visit.BranchId, newlyRejectedReservedProductIds);
+
             foreach (var svc in visit.Services)
             {
                 if (dto.ApprovedServiceIds.Contains(svc.ServiceId))
@@ -459,6 +504,7 @@ namespace CSMS.service.Visits
             visit.Status = anyApproved ? Status.InProgress : Status.serviceRejected;
 
             await _context.SaveChangesAsync();
+            await NotifyVisitStatusChangedAsync(customerId, visit.VisitId, visit.Status);
 
             return new ConfirmationResponseDto
             {
@@ -467,6 +513,71 @@ namespace CSMS.service.Visits
                 ApprovedCount = dto.ApprovedServiceIds.Count,
                 RejectedCount = dto.RejectedServiceIds.Count,
             };
+        }
+
+        private async Task ReserveBranchStockAsync(int branchId, IReadOnlyCollection<int> productIds)
+        {
+            if (productIds.Count == 0)
+                return;
+
+            var counts = productIds
+                .GroupBy(id => id)
+                .ToDictionary(g => g.Key, g => g.Count());
+            var distinctIds = counts.Keys.ToList();
+
+            var entries = await _context.BranchProducts
+                .Where(bp => bp.BranchId == branchId && distinctIds.Contains(bp.ProductId))
+                .ToListAsync();
+            var entryMap = entries.ToDictionary(bp => bp.ProductId);
+
+            var insufficient = new List<int>();
+            foreach (var (productId, needed) in counts)
+            {
+                if (!entryMap.TryGetValue(productId, out var entry) || entry.Quantity < needed)
+                    insufficient.Add(productId);
+            }
+
+            if (insufficient.Count > 0)
+                throw new InvalidOperationException(
+                    $"Product(s) {string.Join(", ", insufficient)} are out of stock at branch {branchId}.");
+
+            foreach (var (productId, needed) in counts)
+            {
+                entryMap[productId].Quantity -= needed;
+            }
+        }
+
+        private async Task RestockBranchStockAsync(int branchId, IReadOnlyCollection<int> productIds)
+        {
+            if (productIds.Count == 0)
+                return;
+
+            var counts = productIds
+                .GroupBy(id => id)
+                .ToDictionary(g => g.Key, g => g.Count());
+            var distinctIds = counts.Keys.ToList();
+
+            var entries = await _context.BranchProducts
+                .Where(bp => bp.BranchId == branchId && distinctIds.Contains(bp.ProductId))
+                .ToListAsync();
+
+            foreach (var entry in entries)
+            {
+                if (counts.TryGetValue(entry.ProductId, out var count))
+                    entry.Quantity += count;
+            }
+        }
+
+        private async Task NotifyVisitStatusChangedAsync(string? customerUserId, int visitId, Status status)
+        {
+            if (string.IsNullOrWhiteSpace(customerUserId))
+                return;
+
+            await _notificationHub.Clients
+                .Group(NotificationHub.GroupName(customerUserId))
+                .SendAsync("VisitStatusChanged", new VisitStatusChangedNotification(
+                    visitId,
+                    VisitStatusHelper.ToApiString(status)));
         }
 
         private async Task NotifyCustomerDiagnosisReadyAsync(Visit visit)
@@ -502,6 +613,7 @@ namespace CSMS.service.Visits
         {
             var visit = await _context.Visits
                 .Include(v => v.Car)
+                    .ThenInclude(c => c.Customer)
                 .Include(v => v.Services)
                 .FirstOrDefaultAsync(v => v.VisitId == visitId&&v.Status!=Status.DiagnosesSentToCustomer&& v.Status != Status.Entered);
 
@@ -532,6 +644,7 @@ namespace CSMS.service.Visits
 
             visit.Status = Status.Completed ;//if there is a emegency request for that car and this car is finoshed change the status of the emegency request 
             await _context.SaveChangesAsync();
+            await NotifyVisitStatusChangedAsync(visit.Car?.Customer?.UserId, visit.VisitId, visit.Status);
 
             return new CompletionResponseDto
             {

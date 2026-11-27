@@ -158,7 +158,7 @@ public class CarService
             CarCompany = dto.CarCompany,
             Model = dto.Model,
             CustomerId = customer.CustomerId,
-            PriceInEgp = dto.PriceInEgp!.Value,
+            PriceInEgp = dto.PriceInEgp ?? 0,
             CurrentKm = dto.CurrentKm!.Value
         };
 

@@ -7,6 +7,8 @@ namespace CSMS.Dto.Branch
         public int BranchId { get; set; }
         public string Name { get; set; } = null!;
         public string Location { get; set; } = null!;
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public string OpenTime { get; set; } = null!;
         public string CloseTime { get; set; } = null!;
         public ManagerSummaryDto? Manager { get; set; }
@@ -26,6 +28,8 @@ namespace CSMS.Dto.Branch
         public int BranchId { get; set; }
         public string Name { get; set; } = null!;
         public string Location { get; set; } = null!;
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public string OpenTime { get; set; } = null!;
         public string CloseTime { get; set; } = null!;
         public DateOnly OpeningDate { get; set; }

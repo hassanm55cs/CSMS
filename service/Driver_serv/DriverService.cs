@@ -1,9 +1,12 @@
 using CSMS.Data;
 using CSMS.Dto.DriversDto;
 using CSMS.Helper;
+using CSMS.Hubs;
 using CSMS.Models;
+using CSMS.service.Emergency_serv;
 using CSMS.ViewModel;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CSMS.service.Driver_serv;
@@ -12,11 +15,32 @@ public class DriverService:IDriverService
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IHubContext<NotificationHub> _notificationHub;
 
-    public DriverService(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+    public DriverService(
+        ApplicationDbContext context,
+        UserManager<ApplicationUser> userManager,
+        IHubContext<NotificationHub> notificationHub)
     {
         _context = context;
         _userManager = userManager;
+        _notificationHub = notificationHub;
+    }
+
+    public async Task<DriverViewModel?> GetMeAsync(string userId)
+    {
+        var driver = await _context.Drivers
+            .Include(d => d.Branch)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(d => d.UserId == userId);
+
+        if (driver is null) return null;
+
+        var vm = ToViewModel(driver);
+        vm.BranchName = driver.Branch?.BranchName;
+        vm.BranchLatitude = driver.Branch?.Latitude;
+        vm.BranchLongitude = driver.Branch?.Longitude;
+        return vm;
     }
 
     public async Task<PagedViewModel<DriverViewModel>> GetDriversAsync(DriverListQueryDto query)
@@ -169,6 +193,28 @@ public class DriverService:IDriverService
         }
 
         await _context.SaveChangesAsync();
+
+        // Push live driver GPS to the customer if the driver is currently on an active SOS job.
+        var liveStatuses = EmergencyStatusHelper.ActiveStatuses;
+        var activeRequest = await _context.EmergencyRequests
+            .AsNoTracking()
+            .Include(r => r.CarLicencePlateNavigation)
+                .ThenInclude(c => c.Customer)
+            .Include(r => r.Branch)
+            .Include(r => r.Driver)
+                .ThenInclude(d => d!.Branch)
+            .Include(r => r.Truck)
+            .FirstOrDefaultAsync(r =>
+                r.DriverId == driver.DriverId &&
+                liveStatuses.Contains(r.StatusEmergency));
+
+        if (activeRequest is not null &&
+            !string.IsNullOrWhiteSpace(activeRequest.CarLicencePlateNavigation.Customer.UserId))
+        {
+            await _notificationHub.Clients
+                .Group(NotificationHub.GroupName(activeRequest.CarLicencePlateNavigation.Customer.UserId))
+                .SendAsync("EmergencyRequestUpdated", EmergencyService.ToViewModel(activeRequest));
+        }
 
         return new DriverLocationResult(
             DriverLocationStatus.Updated,

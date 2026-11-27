@@ -14,6 +14,8 @@ public partial class EmergencyRequest
 
     public int ?DriverId { get; set; }
 
+    public int? BranchId { get; set; }
+
     public string Latitude { get; set; } = null!;
 
     public string Longitude { get; set; } = null!;
@@ -23,6 +25,7 @@ public partial class EmergencyRequest
     public virtual Car CarLicencePlateNavigation { get; set; } = null!;
 
     public virtual Driver Driver { get; set; } = null!;
+    public virtual ServiceBranch? Branch { get; set; }
     public string ?ProblemType{ get; set; }
     public virtual EmergencyTruck? Truck { get; set; }
     public string? TruckLicencePlate { get; set; }

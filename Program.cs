@@ -34,9 +34,10 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
-    policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+    policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5180", "http://127.0.0.1:5180")
         .AllowAnyHeader()
-        .AllowAnyMethod()));
+        .AllowAnyMethod()
+        .AllowCredentials()));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -161,6 +162,10 @@ builder.Services
 var app = builder.Build();
 
 await SeedRolesAsync(app.Services);
+if (app.Environment.IsDevelopment())
+{
+    await SeedTestAccountsAsync(app.Services);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -191,6 +196,124 @@ static async Task SeedRolesAsync(IServiceProvider services)
         if (!await roleManager.RoleExistsAsync(role))
         {
             await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+}
+
+static async Task SeedTestAccountsAsync(IServiceProvider services)
+{
+    using var scope = services.CreateScope();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+    var firstBranchId = await context.ServiceBranches
+        .OrderBy(b => b.BranchId)
+        .Select(b => (int?)b.BranchId)
+        .FirstOrDefaultAsync();
+
+    async Task<ApplicationUser?> EnsureUserAsync(string email, string password, string phone, string role)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                PhoneNumber = phone,
+                EmailConfirmed = true
+            };
+            var created = await userManager.CreateAsync(user, password);
+            if (!created.Succeeded) return null;
+        }
+        if (!await userManager.IsInRoleAsync(user, role))
+        {
+            await userManager.AddToRoleAsync(user, role);
+        }
+        return user;
+    }
+
+    // 1. Admin
+    await EnsureUserAsync("admin@csms.test", "Admin@123", "01000000001", "admin");
+
+    // 2. Employee (Branch 1)
+    if (firstBranchId.HasValue)
+    {
+        var empUser = await EnsureUserAsync("employee@csms.test", "Employee@123", "01000000002", "employee");
+        if (empUser is not null && !await context.Employees.AnyAsync(e => e.UserId == empUser.Id || e.Email == "employee@csms.test"))
+        {
+            context.Employees.Add(new Employee
+            {
+                FullName = "Omar Technician",
+                Email = "employee@csms.test",
+                PhoneNumber = "01000000002",
+                Facultly = "Automotive Engineering",
+                YearsOfExperince = 5,
+                StartingWorkDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-2)),
+                Salary = 12000m,
+                BranchId = firstBranchId.Value,
+                UserId = empUser.Id
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // 3. Driver (Branch 1)
+        var drvUser = await EnsureUserAsync("driver@csms.test", "Driver@123", "01000000003", "driver");
+        if (drvUser is not null && !await context.Drivers.AnyAsync(d => d.UserId == drvUser.Id || d.Email == "driver@csms.test"))
+        {
+            context.Drivers.Add(new Driver
+            {
+                FullName = "Tarek Tow Driver",
+                Email = "driver@csms.test",
+                PhoneNumber = "01000000003",
+                StartWorkDate = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1)),
+                Salary = 9500,
+                IsAvailable = true,
+                Latitude = "30.0561",
+                Longitude = "31.3396",
+                BranchId = firstBranchId.Value,
+                UserId = drvUser.Id
+            });
+            await context.SaveChangesAsync();
+        }
+    }
+
+    // 4. Customer + sample car
+    var custUser = await EnsureUserAsync("customer@csms.test", "Customer@123", "01000000004", "customer");
+    if (custUser is not null)
+    {
+        var customer = await context.Customers.FirstOrDefaultAsync(c => c.UserId == custUser.Id || c.Email == "customer@csms.test");
+        if (customer is null)
+        {
+            customer = new Customer
+            {
+                FullName = "Nour Customer",
+                Email = "customer@csms.test",
+                Phone = "01000000004",
+                Address = "Nasr City, Cairo",
+                UserId = custUser.Id
+            };
+            context.Customers.Add(customer);
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.Cars.AnyAsync(c => c.LicencesPlate == "ABC123"))
+        {
+            context.Cars.Add(new Car
+            {
+                LicencesPlate = "ABC123",
+                CarCompany = "Toyota",
+                Model = "Corolla",
+                Color = "Silver",
+                NoOfCylinders = 4,
+                FuelType = CSMS.Enums.FuelType.Gasoline,
+                EngineType = CSMS.Enums.EngineType.NaturallyAspirated,
+                ManufactuareDate = new DateOnly(2023, 1, 1),
+                CurrentKm = 24500,
+                PriceInEgp = 1200000,
+                CustomerId = customer.CustomerId
+            });
+            await context.SaveChangesAsync();
         }
     }
 }
