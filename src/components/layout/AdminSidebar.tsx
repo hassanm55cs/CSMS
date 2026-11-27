@@ -10,7 +10,7 @@ export function AdminSidebar() {
     { path: ROUTES.admin.branches,  icon: 'info', label: 'Branches'  },
     { path: ROUTES.admin.fleet,     icon: 'car', label: 'Fleet'     },
     { path: ROUTES.admin.staff,     icon: 'user', label: 'Employees' },
-    { path: ROUTES.admin.drivers,   icon: 'driver', label: 'Driver Approvals' },
+    { path: ROUTES.admin.drivers,   icon: 'driver', label: 'Drivers' },
     { path: ROUTES.admin.products,  icon: 'sparkles', label: 'Products' },
     { path: ROUTES.admin.inventory, icon: 'info', label: 'Inventory' },
     { path: ROUTES.admin.schedules, icon: 'calendar', label: 'Service Schedules' },

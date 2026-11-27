@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/ui/Icon';
+import { CustomSelect } from '../../components/ui/CustomSelect';
 import { adminApi, unwrapList } from '../../utils/adminApi';
 import { ROUTES } from '../../routes/paths';
 
@@ -25,7 +26,7 @@ export default function ServiceBookingPage() {
   const [selectedCar, setSelectedCar] = useState<string | null>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(localToday);
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [loadingPage, setLoadingPage] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -84,7 +85,7 @@ export default function ServiceBookingPage() {
 
   const reset = () => {
     setBooking(null); setStep(1); setSelectedCar(null); setSelectedProductIds([]); setSelectedBranch(null);
-    setBranchProducts([]); setDate(''); setError('');
+    setBranchProducts([]); setDate(localToday()); setError('');
   };
 
   if (booking) return (
@@ -110,11 +111,23 @@ export default function ServiceBookingPage() {
         <>
           <div className="mb-6"><div className="step-bar">{steps.map((label, index) => <div key={label} className="flex items-center flex-1"><div className={'step-dot ' + (index + 1 < step ? 'done' : index + 1 === step ? 'active' : '')}>{index + 1 < step ? '✓' : index + 1}</div>{index < steps.length - 1 && <div className={'step-line ' + (index + 1 < step ? 'done' : '')} />}</div>)}</div><div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--text-3)' }}>{steps.map(label => <span key={label}>{label}</span>)}</div></div>
 
-          {step === 1 && <div className="space-y-3"><h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Which customer car needs service?</h2>{cars.map(item => <button key={item.licencePlate} onClick={() => setSelectedCar(item.licencePlate)} className="w-full card card-hover flex items-center gap-4 text-left" style={{ borderColor: selectedCar === item.licencePlate ? 'var(--primary)' : undefined, borderWidth: selectedCar === item.licencePlate ? 2 : undefined }}><div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}><Icon name="car" size={28} /></div><div className="flex-1"><div className="font-semibold" style={{ color: 'var(--text)' }}>{item.carCompany} {item.model}</div><div className="text-sm font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>{item.licencePlate}</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-4)' }}>{item.currentKm.toLocaleString()} km · {item.color}</div></div>{selectedCar === item.licencePlate && <Icon name="check" size={22} />}</button>)}<button onClick={() => setStep(2)} disabled={!selectedCar} className="btn btn-primary btn-lg w-full mt-2">Next →</button></div>}
+          {step === 1 && <div className="space-y-3"><h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Which of your cars needs service?</h2>{cars.map(item => <button key={item.licencePlate} onClick={() => setSelectedCar(item.licencePlate)} className="w-full card card-hover flex items-center gap-4 text-left" style={{ borderColor: selectedCar === item.licencePlate ? 'var(--primary)' : undefined, borderWidth: selectedCar === item.licencePlate ? 2 : undefined }}><div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}><Icon name="car" size={28} /></div><div className="flex-1"><div className="font-semibold" style={{ color: 'var(--text)' }}>{item.carCompany} {item.model}</div><div className="text-sm font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>{item.licencePlate}</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-4)' }}>{item.currentKm.toLocaleString()} km · {item.color}</div></div>{selectedCar === item.licencePlate && <Icon name="check" size={22} />}</button>)}<button onClick={() => setStep(2)} disabled={!selectedCar} className="btn btn-primary btn-lg w-full mt-2">Next →</button></div>}
 
           {step === 2 && <div className="space-y-5"><h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>Choose branch, service & date</h2>
-            <label className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>Branch<select className="inp mt-2" value={selectedBranch ?? ''} onChange={event => void chooseBranch(Number(event.target.value))}><option value="">Select a branch…</option>{branches.map(item => <option key={item.branchId} value={item.branchId}>{item.name} · {item.location}</option>)}</select></label>
-            <div><label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Service products <span className="text-xs font-normal" style={{ color: 'var(--text-4)' }}>(select all that you need)</span></label>{!selectedBranch ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Choose a branch to see products currently in stock.</p> : loadingProducts ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading available products…</p> : branchProducts.length === 0 ? <p className="card text-sm" style={{ color: 'var(--text-3)' }}>No service products are currently in stock at this branch.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{branchProducts.map(item => { const selected = selectedProductIds.includes(item.productId); return <button key={item.productId} type="button" aria-pressed={selected} onClick={() => setSelectedProductIds(current => selected ? current.filter(id => id !== item.productId) : [...current, item.productId])} className="text-left p-3 rounded-xl border-2 transition-all" style={{ background: selected ? 'var(--primary-light)' : 'color-mix(in srgb, var(--surface) 78%, transparent)', borderColor: selected ? 'var(--primary)' : 'var(--border)', backdropFilter: 'blur(12px)' }}><div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold" style={{ color: selected ? 'var(--primary)' : 'var(--text)' }}>{item.name}</span>{selected && <Icon name="check" size={17} />}</div><div className="text-xs mt-1 font-mono" style={{ color: 'var(--text-3)' }}>EGP {item.price} · {item.quantity} in stock</div></button>; })}</div>}</div>
+            <div>
+              <span className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Branch</span>
+              <CustomSelect
+                value={selectedBranch ? String(selectedBranch) : ''}
+                onChange={value => void chooseBranch(Number(value))}
+                placeholder="Select a branch…"
+                options={branches.map(item => ({
+                  value: String(item.branchId),
+                  label: item.name,
+                  sublabel: item.location,
+                }))}
+              />
+            </div>
+            <div><label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Service products <span className="text-xs font-normal" style={{ color: 'var(--text-4)' }}>(select all that you need)</span></label>{!selectedBranch ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Choose a branch to see products currently in stock.</p> : loadingProducts ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading available products…</p> : branchProducts.length === 0 ? <p className="card text-sm" style={{ color: 'var(--text-3)' }}>No service products are currently in stock at this branch.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{branchProducts.map(item => { const selected = selectedProductIds.includes(item.productId); return <button key={item.productId} type="button" aria-pressed={selected} onClick={() => setSelectedProductIds(current => selected ? current.filter(id => id !== item.productId) : [...current, item.productId])} className="text-left p-3 rounded-xl border-2 transition-all" style={{ background: selected ? 'var(--primary-light)' : 'var(--surface)', borderColor: selected ? 'var(--primary)' : 'var(--border)' }}><div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold" style={{ color: selected ? 'var(--primary)' : 'var(--text)' }}>{item.name}</span>{selected && <Icon name="check" size={17} />}</div><div className="text-xs mt-1 font-mono" style={{ color: 'var(--text-3)' }}>EGP {item.price} · {item.quantity} in stock</div></button>; })}</div>}</div>
             <label className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>Date<input type="date" className="inp mt-2" value={date} min={today} onChange={event => setDate(event.target.value)} /></label>
             <div className="flex gap-3"><button onClick={() => setStep(1)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => setStep(3)} disabled={selectedProductIds.length === 0 || !selectedBranch || !date} className="btn btn-primary flex-1">Review →</button></div>
           </div>}

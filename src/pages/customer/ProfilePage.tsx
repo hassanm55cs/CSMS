@@ -236,7 +236,6 @@ export default function ProfilePage() {
             { label: 'Dark Mode', desc: 'Switch between light and dark theme', checked: dark, onChange: toggleDark },
             { label: 'Arabic Language (RTL)', desc: 'Switch to Arabic interface', checked: lang === 'ar', onChange: toggleLang },
             { label: 'Email Notifications', desc: 'Receive booking confirmations', checked: true, onChange: () => {} },
-            { label: 'SMS Notifications', desc: 'Get SMS updates on your phone', checked: true, onChange: () => {} },
           ].map(item => (
             <div key={item.label} className="flex items-center justify-between">
               <div>

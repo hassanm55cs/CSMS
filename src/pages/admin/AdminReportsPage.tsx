@@ -61,6 +61,7 @@ export default function AdminReportsPage() {
           </div>
         </div>
         <div className="card overflow-x-auto" style={{ padding: 0 }}><table><thead><tr><th>Branch</th><th>Services</th><th>Rentals</th><th>Emergencies</th><th>Revenue</th></tr></thead><tbody>{branches.map(branch => <tr key={branch.branchId}><td>{branch.branchName}</td><td>{branch.services}</td><td>{branch.rentals}</td><td>{branch.emergencies}</td><td>EGP {branch.revenue.toLocaleString()}</td></tr>)}</tbody></table></div>
+        <p className="mt-3 text-xs" style={{ color: 'var(--text-3)' }}>Note: Branch rows reflect branch-assigned services and emergency requests. Rental fleet revenue is tracked at company level in the summary above.</p>
       </>}
     </div>
   );

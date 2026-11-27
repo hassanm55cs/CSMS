@@ -14,7 +14,15 @@ const normalizeSeverity = (value = ''): 'critical' | 'warning' | 'normal' => {
   if (severity.includes('warning')) return 'warning';
   return 'normal';
 };
-const formatDate = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date); };
+const formatDate = (value: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(y, m - 1, d));
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+};
+const formatStatusLabel = (status = '') => status.replace(/([a-z])([A-Z])/g, '$1 $2');
 
 export function CustomerNotificationDetails({ notification, onClose, onRead, onConfirmationSubmitted }: { notification: Notification; onClose: () => void; onRead: (notificationId: number) => void; onConfirmationSubmitted: (notificationId: number) => void }) {
   const [detail, setDetail] = useState<VisitDetail | null>(null);
@@ -80,7 +88,7 @@ export function CustomerNotificationDetails({ notification, onClose, onRead, onC
         <div className="rounded-xl p-3 mb-4 text-sm" style={{ background: 'var(--surface-2)' }}>
           <div className="font-semibold" style={{ color: 'var(--text)' }}>{detail.car.company} {detail.car.model} · {detail.car.licencePlate}</div>
           <div className="mt-1" style={{ color: 'var(--text-3)' }}>{detail.branch.name} · {formatDate(detail.serviceDate)}{detail.employee?.fullName ? ` · ${detail.employee.fullName}` : ''}</div>
-          <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Status: {detail.status}</div>
+          <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Status: {formatStatusLabel(detail.status)}</div>
         </div>
         <p className="text-sm mb-3" style={{ color: 'var(--text-2)' }}>{notification.message}</p>
         {isWaiting(detail.status) && decisionServices.length > 0 && <div className="rounded-xl px-3 py-3 mb-4 text-sm" role="status" style={{ background: 'rgba(217,119,6,0.12)', border: '1px solid rgba(217,119,6,0.35)', color: 'var(--text)' }}>

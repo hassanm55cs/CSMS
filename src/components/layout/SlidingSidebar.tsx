@@ -28,12 +28,14 @@ export function SlidingSidebar({ role, open, onClose, showRentals = false, displ
     { path: ROUTES.employee.dashboard, label: 'My Dashboard', icon: 'home' },
     { path: ROUTES.employee.visits, label: 'Open visits', icon: 'wrench' },
     { path: ROUTES.employee.history, label: 'Visit history', icon: 'history' },
+  ] : role === 'driver' ? [
+    { path: ROUTES.driver.dashboard, label: 'Driver Dispatch', icon: 'driver' },
   ] : [
     { path: ROUTES.admin.dashboard, label: 'Dashboard', icon: 'home' },
     { path: ROUTES.admin.branches, label: 'Branches', icon: 'info' },
     { path: ROUTES.admin.fleet, label: 'Fleet', icon: 'car' },
     { path: ROUTES.admin.staff, label: 'Employees', icon: 'user' },
-    { path: ROUTES.admin.drivers, label: 'Driver Approvals', icon: 'driver' },
+    { path: ROUTES.admin.drivers, label: 'Drivers', icon: 'driver' },
     { path: ROUTES.admin.products, label: 'Products', icon: 'sparkles' },
     { path: ROUTES.admin.inventory, label: 'Inventory', icon: 'info' },
     { path: ROUTES.admin.schedules, label: 'Service Schedules', icon: 'calendar' },

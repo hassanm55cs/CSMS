@@ -1,9 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-palette="slate-cobalt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSMS</title>
+    <title>CSMS — Car Service Management</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('csms-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (theme === 'dark' || (!theme && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          }
+          var palette = localStorage.getItem('csms-palette');
+          if (palette) {
+            document.documentElement.dataset.palette = palette;
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

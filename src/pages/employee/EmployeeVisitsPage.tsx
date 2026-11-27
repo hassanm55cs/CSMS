@@ -47,7 +47,7 @@ export default function EmployeeVisitsPage() {
   const loadProducts = async (visit: EmployeeVisit, page: number, search: string, stockStatus: StockFilter = productStockFilter) => {
     setLoadingProducts(true);
     try {
-      const query = new URLSearchParams({ page: String(page), pageSize: '25', stockStatus });
+      const query = new URLSearchParams({ page: String(page), pageSize: '25', stockStatus, branchId: String(visit.branchId) });
       if (search.trim()) query.set('search', search.trim());
       const response = await adminApi<ProductPage>(`/products?${query.toString()}`);
       const products = unwrapList<any>(response).map(item => {

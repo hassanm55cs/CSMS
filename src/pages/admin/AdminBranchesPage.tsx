@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, unwrapList } from '../../utils/adminApi';
+import { RouteMap } from '../../components/maps/RouteMap';
 
 type Employee = { employeeId: number; fullName: string; email: string; faculty?: string; yearsOfExperience?: number };
-type Branch = { branchId: number; name: string; location: string; openTime: string; closeTime: string; openingDate?: string; employeeCount: number; driverCount: number; manager?: { employeeId: number; fullName: string; email?: string } | null; employees?: Employee[] };
-type BranchForm = { branchName: string; branchLocation: string; openTime: string; closeTime: string; openingDate: string; managerId: string };
-const emptyForm = (): BranchForm => ({ branchName: '', branchLocation: '', openTime: '08:00', closeTime: '18:00', openingDate: new Date().toISOString().slice(0, 10), managerId: '' });
+type Branch = { branchId: number; name: string; location: string; latitude?: number | null; longitude?: number | null; openTime: string; closeTime: string; openingDate?: string; employeeCount: number; driverCount: number; manager?: { employeeId: number; fullName: string; email?: string } | null; employees?: Employee[] };
+type BranchForm = { branchName: string; branchLocation: string; latitude: string; longitude: string; openTime: string; closeTime: string; openingDate: string; managerId: string };
+const emptyForm = (): BranchForm => ({ branchName: '', branchLocation: '', latitude: '', longitude: '', openTime: '08:00', closeTime: '18:00', openingDate: new Date().toISOString().slice(0, 10), managerId: '' });
 
 export default function AdminBranchesPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -46,9 +47,16 @@ export default function AdminBranchesPage() {
       const detail = await adminApi<Branch>(`/branches/${branch.branchId}`);
       setManagerOptions(detail.employees ?? []);
       setEditingId(branch.branchId);
-      setForm({ branchName: detail.name ?? branch.name, branchLocation: detail.location ?? branch.location,
-        openTime: detail.openTime ?? branch.openTime, closeTime: detail.closeTime ?? branch.closeTime,
-        openingDate: (detail.openingDate ?? branch.openingDate ?? '').slice(0, 10), managerId: detail.manager?.employeeId ? String(detail.manager.employeeId) : '' });
+      setForm({
+        branchName: detail.name ?? branch.name,
+        branchLocation: detail.location ?? branch.location,
+        latitude: detail.latitude != null ? String(detail.latitude) : branch.latitude != null ? String(branch.latitude) : '',
+        longitude: detail.longitude != null ? String(detail.longitude) : branch.longitude != null ? String(branch.longitude) : '',
+        openTime: detail.openTime ?? branch.openTime,
+        closeTime: detail.closeTime ?? branch.closeTime,
+        openingDate: (detail.openingDate ?? branch.openingDate ?? '').slice(0, 10),
+        managerId: detail.manager?.employeeId ? String(detail.manager.employeeId) : '',
+      });
       setShowForm(true);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load branch details.'); }
   };
@@ -57,8 +65,16 @@ export default function AdminBranchesPage() {
     event.preventDefault();
     setSaving(true); setError(''); setMessage('');
     try {
-      const body = { branchName: form.branchName, branchLocation: form.branchLocation, openTime: form.openTime, closeTime: form.closeTime,
-        openingDate: form.openingDate, managerId: form.managerId ? Number(form.managerId) : null };
+      const body = {
+        branchName: form.branchName,
+        branchLocation: form.branchLocation,
+        latitude: form.latitude.trim() !== '' ? Number(form.latitude) : null,
+        longitude: form.longitude.trim() !== '' ? Number(form.longitude) : null,
+        openTime: form.openTime,
+        closeTime: form.closeTime,
+        openingDate: form.openingDate,
+        managerId: form.managerId ? Number(form.managerId) : null,
+      };
       await adminApi(editingId ? `/branches/${editingId}` : '/branches', {
         method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body),
       });
@@ -92,16 +108,26 @@ export default function AdminBranchesPage() {
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Branch name<input className="inp mt-1" required maxLength={100} value={form.branchName} onChange={e => setForm({ ...form, branchName: e.target.value })} /></label>
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Location<input className="inp mt-1" required maxLength={200} value={form.branchLocation} onChange={e => setForm({ ...form, branchLocation: e.target.value })} /></label>
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Opening date<input className="inp mt-1" type="date" required value={form.openingDate} onChange={e => setForm({ ...form, openingDate: e.target.value })} /></label>
+        <label className="text-xs" style={{ color: 'var(--text-3)' }}>Latitude<input className="inp mt-1" type="number" step="any" min="-90" max="90" placeholder="30.0444" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} /></label>
+        <label className="text-xs" style={{ color: 'var(--text-3)' }}>Longitude<input className="inp mt-1" type="number" step="any" min="-180" max="180" placeholder="31.2357" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} /></label>
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Open time<input className="inp mt-1" type="time" required value={form.openTime} onChange={e => setForm({ ...form, openTime: e.target.value })} /></label>
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Close time<input className="inp mt-1" type="time" required value={form.closeTime} onChange={e => setForm({ ...form, closeTime: e.target.value })} /></label>
         <label className="text-xs" style={{ color: 'var(--text-3)' }}>Branch manager<select className="inp mt-1" value={form.managerId} onChange={e => setForm({ ...form, managerId: e.target.value })}><option value="">No manager</option>{managerOptions.map(employee => <option key={employee.employeeId} value={employee.employeeId}>{employee.fullName} · #{employee.employeeId}</option>)}</select><span className="block mt-1">Only employees in this branch can be selected.</span></label>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <p className="text-xs mb-1.5" style={{ color: 'var(--text-3)' }}>Click on the map to set the branch latitude &amp; longitude (used for nearest-branch SOS dispatch):</p>
+          <RouteMap
+            height={220}
+            branch={form.latitude !== '' && form.longitude !== '' ? { latitude: Number(form.latitude), longitude: Number(form.longitude), label: form.branchName || 'Branch' } : null}
+            onPickLocation={(lat, lng) => setForm(current => ({ ...current, latitude: String(lat), longitude: String(lng) }))}
+          />
+        </div>
         <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2"><button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Branch'}</button></div>
       </form>}
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         {loading ? <p className="p-5 text-sm" style={{ color: 'var(--text-3)' }}>Loading branches…</p> : (
           <table><thead><tr><th>Branch</th><th>Manager</th><th>Employees</th><th>Drivers</th><th>Hours</th><th>Actions</th></tr></thead>
             <tbody>{branches.map(branch => <tr key={branch.branchId}>
-              <td><button className="text-left" onClick={() => void viewBranchEmployees(branch)}><div className="font-semibold underline-offset-2 hover:underline" style={{ color: 'var(--primary)' }}>{branch.name}</div><div className="text-xs font-mono" style={{ color: 'var(--text-4)' }}>{branch.location}</div></button></td>
+              <td><button className="text-left" onClick={() => void viewBranchEmployees(branch)}><div className="font-semibold underline-offset-2 hover:underline" style={{ color: 'var(--primary)' }}>{branch.name}</div><div className="text-xs font-mono" style={{ color: 'var(--text-4)' }}>{branch.location}{branch.latitude != null && branch.longitude != null ? ` · (${branch.latitude.toFixed(4)}, ${branch.longitude.toFixed(4)})` : ''}</div></button></td>
               <td style={{ color: 'var(--text-2)' }}>{branch.manager?.fullName ?? '—'}</td>
               <td className="font-mono">{branch.employeeCount}</td><td className="font-mono">{branch.driverCount}</td>
               <td className="text-xs" style={{ color: 'var(--text-3)' }}>{branch.openTime}–{branch.closeTime}</td>

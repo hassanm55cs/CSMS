@@ -25,6 +25,11 @@ export const ROUTES = {
     history:   '/employee/history',
   },
 
+  driver: {
+    root:      '/driver',
+    dashboard: '/driver',
+  },
+
   admin: {
     root:      '/admin',
     dashboard: '/admin',
@@ -54,10 +59,11 @@ export function homePathForRole(role: Role): string {
     case 'customer': return ROUTES.customer.dashboard;
     case 'employee': return ROUTES.employee.dashboard;
     case 'admin':    return ROUTES.admin.dashboard;
+    case 'driver':   return ROUTES.driver.dashboard;
   }
 }
 
-const ROOT_PATHS: string[] = [ROUTES.customer.root, ROUTES.employee.root, ROUTES.admin.root];
+const ROOT_PATHS: string[] = [ROUTES.customer.root, ROUTES.employee.root, ROUTES.admin.root, ROUTES.driver.root];
 
 /**
  * Active-link check for nav items.

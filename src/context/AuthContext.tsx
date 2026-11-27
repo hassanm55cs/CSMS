@@ -9,7 +9,7 @@ interface AuthCtxValue {
 }
 
 const STORAGE_KEY = 'csms.role';
-const ROLES: Role[] = ['customer', 'employee', 'admin'];
+const ROLES: Role[] = ['customer', 'employee', 'admin', 'driver'];
 
 function readStoredRole(): Role | null {
   try {

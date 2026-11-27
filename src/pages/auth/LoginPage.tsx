@@ -4,10 +4,12 @@ import { CarSVG } from '../../components/ui/CarSVG';
 import { Field } from '../../components/ui/Field';
 import { Toast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { useT } from '../../i18n/useT';
 import { Icon } from '../../components/ui/Icon';
+import { PalettePicker } from '../../components/layout/PalettePicker';
 
-const supportedRoles: Role[] = ['customer', 'employee', 'admin'];
+const supportedRoles: Role[] = ['customer', 'employee', 'admin', 'driver'];
 const roleClaimNames = [
   'role',
   'roles',
@@ -32,11 +34,11 @@ function getRoleFromToken(token: string): Role | null {
 
 export default function LoginPage() {
   const t = useT();
+  const { dark, toggleDark } = useTheme();
   // After login() the <PublicOnlyRoute> guard redirects to the role's home page.
   const { login: onLogin } = useAuth();
 
   const [mode, setMode]       = useState<'login' | 'register'>('login');
-  const [registerRole, setRegisterRole] = useState<'customer' | 'driver'>('customer');
   const [animState, setAnim]  = useState<'idle' | 'right' | 'left' | 'exit'>('idle');
   const [hasSwitchedMode, setHasSwitchedMode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -54,8 +56,6 @@ export default function LoginPage() {
   const [rEmail, setREmail]     = useState('');
   const [rPhone, setRPhone]     = useState('');
   const [rAddress, setRAddress] = useState('');
-  const [rBranchId, setRBranchId] = useState('');
-  const [rStartWorkDate, setRStartWorkDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [rPass, setRPass]       = useState('');
   const [rPassC, setRPassC]     = useState('');
   const [showRPw, setShowRPw]   = useState(false);
@@ -109,8 +109,7 @@ export default function LoginPage() {
     if (!rName)  errs.rName  = 'Name is required';
     if (!rEmail) errs.rEmail = 'Email is required';
     if (!rPhone) errs.rPhone = 'Phone is required';
-    if (registerRole === 'customer' && !rAddress) errs.rAddress = 'Address is required';
-    if (registerRole === 'driver' && (!rBranchId || Number(rBranchId) < 1)) errs.rBranchId = 'Enter a valid branch ID';
+    if (!rAddress) errs.rAddress = 'Address is required';
     if (!rPass)  errs.rPass  = 'Password is required';
     else if (rPass.length < 8) errs.rPass = 'Password must be at least 8 characters';
     if (rPass !== rPassC) errs.rPassC = 'Passwords do not match';
@@ -118,20 +117,17 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) || 'https://localhost:7260').replace(/\/$/, '');
-      const isDriver = registerRole === 'driver';
-      const response = await fetch(`${apiUrl}/auth/register/${isDriver ? 'Driver' : 'customer'}`, {
+      const response = await fetch(`${apiUrl}/auth/register/customer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isDriver
-          ? { fullName: rName, email: rEmail, phoneNumber: rPhone, branchId: Number(rBranchId), startWorkDate: rStartWorkDate, password: rPass, confirmPassword: rPassC }
-          : { fullName: rName, email: rEmail, phoneNumber: rPhone, address: rAddress, password: rPass, confirmPassword: rPassC }),
+        body: JSON.stringify({ fullName: rName, email: rEmail, phoneNumber: rPhone, address: rAddress, password: rPass, confirmPassword: rPassC }),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) {
         const errors = result?.errors ?? result?.Errors;
         throw new Error(Array.isArray(errors) ? errors.join(' ') : result?.message ?? 'Unable to create the account.');
       }
-      setToast({ msg: isDriver ? 'Driver application submitted. An administrator must approve it before access.' : 'Account created. Please sign in.', type: 'success' });
+      setToast({ msg: 'Account created. Please sign in.', type: 'success' });
       switchMode('login');
     } catch (error) {
       setToast({ msg: error instanceof Error ? error.message : 'Unable to connect to the service.', type: 'error' });
@@ -175,12 +171,26 @@ export default function LoginPage() {
 
       {/* ── Right panel ────────────────────────────────────── */}
       <div className="auth-form-side flex-1 flex flex-col relative">
-        {/* Mobile header */}
-        <div className="lg:hidden flex items-center gap-2 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary)' }}>
-            <svg width="14" height="14" viewBox="0 0 220 80" fill="white"><rect x="18" y="30" width="184" height="34" rx="9" /><circle cx="58" cy="64" r="14" /><circle cx="168" cy="64" r="14" /></svg>
+        {/* Top-right theme & palette controls */}
+        <div className="flex items-center justify-between lg:justify-end gap-2 px-5 py-3.5 border-b lg:border-b-0" style={{ borderColor: 'var(--border)' }}>
+          <div className="lg:hidden flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary)' }}>
+              <svg width="14" height="14" viewBox="0 0 220 80" fill="white"><rect x="18" y="30" width="184" height="34" rx="9" /><circle cx="58" cy="64" r="14" /><circle cx="168" cy="64" r="14" /></svg>
+            </div>
+            <span className="font-bold text-base text-white">{t.appName}</span>
           </div>
-          <span className="font-bold text-base" style={{ color: 'var(--text)' }}>{t.appName}</span>
+          <div className="flex items-center gap-1 rounded-xl px-1.5 py-1 border" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+            <PalettePicker />
+            <button
+              type="button"
+              onClick={toggleDark}
+              className="btn btn-ghost btn-sm"
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={dark ? 'Light mode' : 'Dark mode'}
+            >
+              <Icon name={dark ? 'sun' : 'moon'} size={17} />
+            </button>
+          </div>
         </div>
 
         {/* Form */}
@@ -192,7 +202,7 @@ export default function LoginPage() {
               {mode === 'login' ? (
                 <>
                   <h2 className="font-bold text-2xl mb-1" style={{ color: 'var(--text)' }}>{t.signIn}</h2>
-                  <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>{t.hasAccount.replace('Already have', 'Enter your credentials to')}</p>
+                  <p className="text-sm mb-6" style={{ color: 'var(--text-3)' }}>Enter your credentials to sign in</p>
                   <form onSubmit={handleLogin} noValidate className="space-y-4">
                     <Field label={t.email} error={errors.email}>
                       <input type="email" value={email} onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: '' })); }}
@@ -233,20 +243,8 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <div className="auth-register-roles grid grid-cols-2 gap-2 mb-5" aria-label="Account type">
-                    {(['customer', 'driver'] as const).map(option => (
-                      <button key={option} type="button" onClick={() => setRegisterRole(option)}
-                        aria-pressed={registerRole === option}
-                        className={`auth-register-role rounded-xl border p-3 flex items-center justify-center gap-2 text-sm font-semibold transition-all ${registerRole === option ? 'is-selected' : ''}`}>
-                        <Icon name={option === 'customer' ? 'user' : 'driver'} size={18} />
-                        {option === 'customer' ? t.customer : 'Driver'}
-                      </button>
-                    ))}
-                  </div>
                   <h2 className="font-bold text-2xl mb-1" style={{ color: 'var(--text)' }}>{t.createAccount}</h2>
-                  <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>
-                    {registerRole === 'customer' ? 'Join CSMS today' : 'Enter your branch and start date. An administrator sets salary and approves driver access.'}
-                  </p>
+                  <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>Join CSMS today</p>
                   <form onSubmit={handleRegister} noValidate className="space-y-3">
                     <Field label={t.fullName} error={errors.rName}>
                       <input type="text" value={rName} onChange={e => setRName(e.target.value)}
@@ -262,23 +260,11 @@ export default function LoginPage() {
                       <input type="tel" value={rPhone} onChange={e => setRPhone(e.target.value)}
                         className={`inp ${errors.rPhone ? 'error' : ''}`} placeholder="+20 100 000 0000" />
                     </Field>
-                    {registerRole === 'customer' ? (
-                      <Field label={t.address} error={errors.rAddress}>
-                        <input type="text" value={rAddress} onChange={e => setRAddress(e.target.value)}
-                          className={`inp ${errors.rAddress ? 'error' : ''}`} placeholder="Street, city"
-                          autoComplete="street-address" />
-                      </Field>
-                    ) : (
-                      <>
-                        <Field label="Branch ID" error={errors.rBranchId}>
-                          <input type="number" min="1" value={rBranchId} onChange={e => setRBranchId(e.target.value)}
-                            className={`inp ${errors.rBranchId ? 'error' : ''}`} placeholder="1" />
-                        </Field>
-                        <Field label="Start Work Date">
-                          <input type="date" value={rStartWorkDate} onChange={e => setRStartWorkDate(e.target.value)} className="inp" />
-                        </Field>
-                      </>
-                    )}
+                    <Field label={t.address} error={errors.rAddress}>
+                      <input type="text" value={rAddress} onChange={e => setRAddress(e.target.value)}
+                        className={`inp ${errors.rAddress ? 'error' : ''}`} placeholder="Street, city"
+                        autoComplete="street-address" />
+                    </Field>
                     <div className="grid grid-cols-2 gap-3">
                       <Field label={t.password} error={errors.rPass}>
                         <div className="inp-wrap">

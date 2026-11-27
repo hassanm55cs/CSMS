@@ -13,8 +13,8 @@ export default function RentalConfirmedPage() {
     <h2 className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>Rental Confirmed</h2>
     <p className="mb-1" style={{ color: 'var(--text-3)' }}>{rental.carCompany} {rental.model}</p>
     <p className="text-sm font-mono mb-1" style={{ color: 'var(--text-3)' }}>{rental.licencePlate}</p>
-    <p className="mb-4" style={{ color: 'var(--text-3)' }}>{rental.rentStartDate} → {rental.rentEndDate} · {rental.noOfDays} days</p>
-    <div className="card mb-5 text-center"><div className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Reservation #{rental.rentedCarCustomerId} · {rental.status}</div><span className="font-mono text-lg font-bold" style={{ color: 'var(--primary)' }}>EGP {rental.priceForRent.toLocaleString()}</span><div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Total from the backend reservation</div></div>
+    <p className="mb-4" style={{ color: 'var(--text-3)' }}>{rental.rentStartDate} → {rental.rentEndDate} · {rental.noOfDays} {rental.noOfDays === 1 ? 'day' : 'days'}</p>
+    <div className="card mb-5 text-center"><div className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>Reservation #{rental.rentedCarCustomerId} · {rental.status}</div><span className="font-mono text-lg font-bold" style={{ color: 'var(--primary)' }}>EGP {rental.priceForRent.toLocaleString()}</span><div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Confirmed reservation total</div></div>
     <div className="flex gap-3"><button onClick={() => navigate(ROUTES.customer.rentals)} className="btn btn-secondary">Browse Fleet</button><button onClick={() => navigate(ROUTES.customer.dashboard)} className="btn btn-primary">Dashboard</button></div>
   </div>;
 }

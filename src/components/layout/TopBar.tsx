@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import type { Role } from '../../types';
-import { MOCK_USER } from '../../data/mock-data';
 import { ROUTES, homePathForRole } from '../../routes/paths';
+import { getTokenDisplayName } from '../../utils/userDisplayName';
 import { useT } from '../../i18n/useT';
 import { useTheme } from '../../context/ThemeContext';
 import { Icon } from '../ui/Icon';
 import { SidebarToggle } from './SidebarToggle';
+import { PalettePicker } from './PalettePicker';
 
 export function TopBar({ role, onLogout, onMenuClick, menuOpen = false }: { role: Role; onLogout: () => void; onMenuClick?: () => void; menuOpen?: boolean }) {
   const navigate = useNavigate();
@@ -13,14 +14,15 @@ export function TopBar({ role, onLogout, onMenuClick, menuOpen = false }: { role
   const t = useT();
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 sm:px-6 border-b"
-      style={{ background: 'color-mix(in srgb, var(--surface) 84%, transparent)', borderColor: 'var(--border)', backdropFilter: 'blur(18px) saturate(150%)' }}>
-      <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate(homePathForRole(role))}>
+      style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
+      <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate(homePathForRole(role))}>
         {onMenuClick
           ? <SidebarToggle open={menuOpen} onToggle={onMenuClick} className="header-sidebar-toggle" />
           : <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary)' }}><svg width="16" height="16" viewBox="0 0 220 80" fill="white" aria-hidden="true"><rect x="18" y="30" width="184" height="34" rx="9" /><path d="M58 30 L76 11 L150 11 L170 30 Z" opacity="0.7" /><circle cx="58" cy="64" r="14" /><circle cx="168" cy="64" r="14" /></svg></div>}
         <span className="font-bold text-base tracking-tight" style={{ color: 'var(--text)' }}>{t.appName}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
+        <PalettePicker />
         <button onClick={toggleLang} className="btn btn-ghost btn-sm font-mono text-xs" style={{ color: 'var(--text-3)' }}>
           {lang === 'en' ? 'العربية' : 'EN'}
         </button>
@@ -29,8 +31,8 @@ export function TopBar({ role, onLogout, onMenuClick, menuOpen = false }: { role
           <Icon name={dark ? 'sun' : 'moon'} size={18} />
         </button>
         {role === 'customer' && (
-          <button onClick={() => navigate(ROUTES.customer.profile)} className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'var(--primary)' }} aria-label="Profile">
-            {MOCK_USER.name[0]}
+          <button onClick={() => navigate(ROUTES.customer.profile)} className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white" style={{ background: 'var(--primary)' }} aria-label="Profile" title={getTokenDisplayName() || 'Profile'}>
+            {(getTokenDisplayName().trim().slice(0, 2).toUpperCase()) || <Icon name="user" size={15} />}
           </button>
         )}
         <button onClick={onLogout} className="btn btn-ghost btn-sm" title="Sign out">

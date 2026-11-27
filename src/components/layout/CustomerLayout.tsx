@@ -1,17 +1,16 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { HubConnectionBuilder, HttpTransportType, LogLevel } from '@microsoft/signalr';
 import { CustomerHeader } from './CustomerHeader';
 import { SlidingSidebar } from './SlidingSidebar';
-import { AIFab } from './AIFab';
 import { PageFallback } from '../ui/PageFallback';
 import { adminApi, unwrapList } from '../../utils/adminApi';
+import { connectNotificationHub } from '../../utils/signalr';
 import { ROUTES } from '../../routes/paths';
 import { Icon } from '../ui/Icon';
 
 type CustomerEmergency = { status?: string };
 type NotificationMessage = { notificationId: number; visitId: number; message: string; createdAt: string; isRead: boolean; confirmationPending?: boolean; ConfirmationPending?: boolean };
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) || 'https://localhost:7260').replace(/\/$/, '');
+type VisitStatusChangedMessage = { visitId?: number; VisitId?: number; status?: string; Status?: string };
 
 export function CustomerLayout() {
   const navigate = useNavigate();
@@ -69,20 +68,8 @@ export function CustomerLayout() {
   }, [refreshNotificationCount]);
 
   useEffect(() => {
-    let disposed = false;
-    let retryTimer: number | undefined;
-    const hub = new HubConnectionBuilder()
-      .withUrl(`${API_BASE}/hubs/notifications`, {
-        accessTokenFactory: () => localStorage.getItem('csms.token') ?? '',
-        transport: HttpTransportType.WebSockets,
-        skipNegotiation: true,
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
-
     const onDiagnosisReady = (payload: NotificationMessage) => {
-      if (disposed || !payload) return;
+      if (!payload) return;
       const notification: NotificationMessage = {
         notificationId: Number(payload.notificationId),
         visitId: Number(payload.visitId),
@@ -94,40 +81,43 @@ export function CustomerLayout() {
       if (!notification.notificationId || !notification.visitId) return;
       setNotificationCount(current => current + 1);
       window.dispatchEvent(new CustomEvent('csms:notification-received', { detail: notification }));
-      window.setTimeout(() => { if (!disposed) void refreshNotificationCount(); }, 400);
+      window.setTimeout(() => { void refreshNotificationCount(); }, 400);
     };
-    hub.on('VisitDiagnosisReady', onDiagnosisReady);
-    hub.onreconnected(() => {
-      void refreshNotificationCount();
-      window.dispatchEvent(new Event('csms:notifications-resync'));
-    });
+    const onVisitStatusChanged = (payload: VisitStatusChangedMessage) => {
+      if (!payload) return;
+      const visitId = Number(payload.visitId ?? payload.VisitId);
+      const status = payload.status ?? payload.Status;
+      if (!visitId || !status) return;
+      window.dispatchEvent(new CustomEvent('csms:visit-status-changed', {
+        detail: { visitId, status },
+      }));
+    };
+    const onEmergencyUpdated = (payload: unknown) => {
+      if (!payload) return;
+      window.dispatchEvent(new CustomEvent('csms:emergency-updated', { detail: payload }));
+      window.dispatchEvent(new Event('csms:emergency-requests-changed'));
+    };
 
-    const scheduleReconnect = () => {
-      if (!disposed) retryTimer = window.setTimeout(() => { void connect(); }, 5000);
-    };
-    const connect = async () => {
-      try {
-        await hub.start();
-        if (!disposed) void refreshNotificationCount();
-      } catch {
-        scheduleReconnect();
-      }
-    };
-    hub.onclose(scheduleReconnect);
-    void connect();
-    return () => {
-      disposed = true;
-      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
-      hub.off('VisitDiagnosisReady', onDiagnosisReady);
-      void hub.stop();
-    };
+    return connectNotificationHub({
+      handlers: {
+        VisitDiagnosisReady: onDiagnosisReady,
+        VisitStatusChanged: onVisitStatusChanged,
+        EmergencyRequestUpdated: onEmergencyUpdated,
+      },
+      onStarted: () => { void refreshNotificationCount(); },
+      onReconnected: () => {
+        void refreshNotificationCount();
+        window.dispatchEvent(new Event('csms:notifications-resync'));
+        window.dispatchEvent(new Event('csms:emergency-requests-changed'));
+      },
+    });
   }, [refreshNotificationCount]);
 
   const refreshEmergencyStatus = useCallback(async () => {
     try {
       const result = await adminApi('/emergency-requests?page=1&pageSize=100');
       const requests = unwrapList<CustomerEmergency>(result);
-      setShowRentals(requests.some(request => typeof request.status === 'string' && request.status.trim().length > 0 && request.status.toLowerCase() !== 'completed'));
+      setShowRentals(requests.some(request => typeof request.status === 'string' && request.status.trim().length > 0 && !['completed', 'cancelled'].includes(request.status.trim().toLowerCase())));
     } catch {
       setShowRentals(false);
     }
@@ -146,7 +136,7 @@ export function CustomerLayout() {
 
   return (
     <div className="app-shell flex flex-col h-dvh overflow-hidden">
-      <CustomerHeader notificationCount={notificationCount} onNotificationsBellClick={markAllNotificationsRead} onMenuClick={() => setMobileMenuOpen(value => !value)} menuOpen={mobileMenuOpen} />
+      <CustomerHeader customerName={customerName} notificationCount={notificationCount} onNotificationsBellClick={markAllNotificationsRead} onMenuClick={() => setMobileMenuOpen(value => !value)} menuOpen={mobileMenuOpen} />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <SlidingSidebar role="customer" open={mobileMenuOpen} showRentals={showRentals} displayName={customerName} onClose={() => setMobileMenuOpen(value => !value)} />
@@ -172,8 +162,6 @@ export function CustomerLayout() {
           </Suspense>
         </main>
       </div>
-
-      <AIFab />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom';
 import { CustomerLayout } from '../components/layout/CustomerLayout';
 import { EmployeeLayout } from '../components/layout/EmployeeLayout';
 import { AdminLayout } from '../components/layout/AdminLayout';
+import { DriverLayout } from '../components/layout/DriverLayout';
 import { PageFallback } from '../components/ui/PageFallback';
 import { HomeRedirect, PublicOnlyRoute, RequireRole } from './guards';
 
@@ -23,6 +24,8 @@ const RentalConfirmedPage = lazy(() => import('../pages/customer/rentals/RentalC
 
 const EmployeeDashboardPage = lazy(() => import('../pages/employee/EmployeeDashboardPage'));
 const EmployeeVisitsPage    = lazy(() => import('../pages/employee/EmployeeVisitsPage'));
+
+const DriverDashboardPage   = lazy(() => import('../pages/driver/DriverDashboardPage'));
 
 const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage'));
 const AdminBranchesPage  = lazy(() => import('../pages/admin/AdminBranchesPage'));
@@ -68,6 +71,13 @@ export function AppRoutes() {
           <Route index element={<EmployeeDashboardPage />} />
           <Route path="visits" element={<EmployeeVisitsPage />} />
           <Route path="history" element={<EmployeeVisitsPage />} />
+        </Route>
+      </Route>
+
+      {/* Driver  →  /driver/... */}
+      <Route element={<RequireRole role="driver" />}>
+        <Route path="/driver" element={<DriverLayout />}>
+          <Route index element={<DriverDashboardPage />} />
         </Route>
       </Route>
 

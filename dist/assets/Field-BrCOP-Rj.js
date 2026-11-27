@@ -1,0 +1,1 @@
+import{j as s}from"./index-B5NHGYBG.js";function m({label:e,error:t,children:l}){return s.jsxs("div",{children:[s.jsx("label",{className:"block text-sm font-medium mb-1.5",style:{color:"var(--text-2)"},children:e}),l,t&&s.jsx("p",{className:"text-xs mt-1",style:{color:"var(--sos)"},children:t})]})}export{m as F};
