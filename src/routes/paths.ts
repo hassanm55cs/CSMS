@@ -11,6 +11,8 @@ export const ROUTES = {
     root:       '/customer',
     dashboard:  '/customer',
     bookService:'/customer/book-service',
+    visits:     '/customer/visits',
+    notifications: '/customer/notifications',
     rentals:    '/customer/rentals',
     sos:        '/customer/sos',
     profile:    '/customer/profile',
@@ -20,6 +22,7 @@ export const ROUTES = {
     root:      '/employee',
     dashboard: '/employee',
     visits:    '/employee/visits',
+    history:   '/employee/history',
   },
 
   admin: {
@@ -28,6 +31,12 @@ export const ROUTES = {
     branches:  '/admin/branches',
     fleet:     '/admin/fleet',
     staff:     '/admin/staff',
+    drivers:   '/admin/drivers',
+    products:  '/admin/products',
+    inventory: '/admin/inventory',
+    schedules: '/admin/service-schedules',
+    emergencies:'/admin/emergencies',
+    records:   '/admin/records',
     reports:   '/admin/reports',
   },
 } as const;

@@ -1,18 +1,19 @@
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { TopBar } from './TopBar';
-import { AdminSidebar } from './AdminSidebar';
 import { PageFallback } from '../ui/PageFallback';
+import { SlidingSidebar } from './SlidingSidebar';
 
 export function AdminLayout() {
   const { logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: 'var(--bg)' }}>
-      <TopBar role="admin" onLogout={logout} />
-      <div className="flex flex-1 overflow-hidden">
-        <AdminSidebar />
-        <main className="flex-1 overflow-y-auto" role="main">
+    <div className="app-shell flex flex-col h-dvh overflow-hidden">
+      <TopBar role="admin" onLogout={logout} onMenuClick={() => setMobileMenuOpen(value => !value)} menuOpen={mobileMenuOpen} />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <SlidingSidebar role="admin" open={mobileMenuOpen} onClose={() => setMobileMenuOpen(value => !value)} />
+        <main className="flex-1 min-w-0 overflow-y-auto" role="main">
           <Suspense fallback={<PageFallback />}>
             <Outlet />
           </Suspense>

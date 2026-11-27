@@ -25,8 +25,7 @@ export const BRANCH_PERF = [
 export const ADMIN_STAFF = [
   { id: 1, name: 'David Chen',    role: 'Mechanic',        branch: 'Downtown Cairo Hub',   status: 'active',   joined: '2023-03-15', phone: '+20 100 555 1001' },
   { id: 2, name: 'Elena Vasquez', role: 'Service Advisor', branch: 'Heliopolis Center',    status: 'active',   joined: '2022-11-01', phone: '+20 100 555 1002' },
-  { id: 3, name: 'Marcus Johnson',role: 'Driver',          branch: '6th of October Branch',status: 'on-duty',  joined: '2024-01-20', phone: '+20 100 555 1003' },
-  { id: 4, name: 'Priya Sharma',  role: 'Manager',         branch: 'Downtown Cairo Hub',   status: 'active',   joined: '2021-06-10', phone: '+20 100 555 1004' },
+  { id: 3, name: 'Priya Sharma',  role: 'Manager',         branch: 'Downtown Cairo Hub',   status: 'active',   joined: '2021-06-10', phone: '+20 100 555 1004' },
 ];
 
 export const ADMIN_FLEET = [

@@ -1,15 +1,22 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ROUTES, isActivePath } from '../../routes/paths';
+import { Icon } from '../ui/Icon';
 
 export function AdminSidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const links: { path: string; icon: string; label: string }[] = [
-    { path: ROUTES.admin.dashboard, icon: '📊', label: 'Dashboard' },
-    { path: ROUTES.admin.branches,  icon: '📍', label: 'Branches'  },
-    { path: ROUTES.admin.fleet,     icon: '🚛', label: 'Fleet'     },
-    { path: ROUTES.admin.staff,     icon: '👥', label: 'Staff'     },
-    { path: ROUTES.admin.reports,         icon: '📈', label: 'Reports'   },
+  const links: { path: string; icon: 'home' | 'info' | 'car' | 'user' | 'driver' | 'sparkles' | 'calendar' | 'alert'; label: string }[] = [
+    { path: ROUTES.admin.dashboard, icon: 'home', label: 'Dashboard' },
+    { path: ROUTES.admin.branches,  icon: 'info', label: 'Branches'  },
+    { path: ROUTES.admin.fleet,     icon: 'car', label: 'Fleet'     },
+    { path: ROUTES.admin.staff,     icon: 'user', label: 'Employees' },
+    { path: ROUTES.admin.drivers,   icon: 'driver', label: 'Driver Approvals' },
+    { path: ROUTES.admin.products,  icon: 'sparkles', label: 'Products' },
+    { path: ROUTES.admin.inventory, icon: 'info', label: 'Inventory' },
+    { path: ROUTES.admin.schedules, icon: 'calendar', label: 'Service Schedules' },
+    { path: ROUTES.admin.emergencies, icon: 'alert', label: 'Emergencies' },
+    { path: ROUTES.admin.records, icon: 'car', label: 'Record Lookup' },
+    { path: ROUTES.admin.reports,   icon: 'sparkles', label: 'Reports'   },
   ];
   return (
     <aside className="sidebar hidden md:flex">
@@ -23,7 +30,7 @@ export function AdminSidebar() {
         <button key={l.path} onClick={() => navigate(l.path)}
           className={`sidebar-item ${isActivePath(pathname, l.path) ? 'active' : ''}`}
           aria-current={isActivePath(pathname, l.path) ? 'page' : undefined}>
-          <span>{l.icon}</span> {l.label}
+          <Icon name={l.icon} size={18} /> {l.label}
         </button>
       ))}
     </aside>

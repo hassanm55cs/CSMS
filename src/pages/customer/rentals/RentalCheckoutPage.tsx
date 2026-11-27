@@ -1,63 +1,72 @@
-import { useState } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
-import type { RentalConfirmation } from '../../../types';
-import { Field } from '../../../components/ui/Field';
-import { RENTAL_FLEET } from '../../../data/mock-data';
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Icon } from '../../../components/ui/Icon';
+import { adminApi } from '../../../utils/adminApi';
 import { ROUTES, rentalPaths } from '../../../routes/paths';
 
+type RentalCar = { licencePlate: string; color: string; fuelType: string; engineType: string; manufactureDate: string; carCompany: string; model: string; pricePerDay: number; available: boolean };
+type Rental = { rentedCarCustomerId: number; licencePlate: string; carCompany: string; model: string; rentStartDate: string; rentEndDate: string; noOfDays: number; priceForRent: number; status: string; createdAt: string };
+type Dates = { from?: string; to?: string };
+const localToday = () => { const n = new Date(); return String(n.getFullYear()) + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); };
+const apiError = (e: unknown) => e instanceof Error ? e.message : 'Could not load this rental vehicle.';
+const daysInclusive = (from: string, to: string) => Math.floor((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1;
+
 export default function RentalCheckoutPage() {
-  const navigate = useNavigate();
-  const [from, setFrom] = useState('');
-  const [to, setTo]     = useState('');
-  const [bookingRef] = useState(() => 'RNT-' + Math.floor(300 + Math.random() * 99));
-  const { carId } = useParams();
-  const selectedCar = RENTAL_FLEET.find(c => String(c.id) === carId);
-  if (!selectedCar) return <Navigate to={ROUTES.customer.rentals} replace />;
+  const navigate = useNavigate(); const location = useLocation(); const { carId } = useParams();
+  const initialDates = (location.state as Dates | null) ?? {};
+  const [from, setFrom] = useState(initialDates.from ?? '');
+  const [to, setTo] = useState(initialDates.to ?? '');
+  const [car, setCar] = useState<RentalCar | null>(null);
+  const [loadingCar, setLoadingCar] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const today = useMemo(localToday, []);
+  const datesValid = Boolean(from && to && from >= today && to >= from);
+  const days = datesValid ? daysInclusive(from, to) : 0;
+  const estimate = (car?.pricePerDay ?? 0) * days;
 
-  // Unavailable cars can't be rented — send the user back to the detail page
-  if (!selectedCar.available) return <Navigate to={rentalPaths.detail(selectedCar.id)} replace />;
+  useEffect(() => {
+    if (!carId) return;
+    let active = true; setLoadingCar(true); setError('');
+    const query = new URLSearchParams();
+    if (from && to && to >= from) { query.set('fromDate', from); query.set('toDate', to); }
+    const queryString = query.toString();
+    adminApi<RentalCar>('/rental-cars/' + encodeURIComponent(carId) + (queryString ? '?' + queryString : ''))
+      .then(result => { if (active) setCar(result); })
+      .catch(cause => { if (active) setError(apiError(cause)); })
+      .finally(() => { if (active) setLoadingCar(false); });
+    return () => { active = false; };
+  }, [carId, from, to]);
 
-  const days = from && to ? Math.max(1, Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86400000)) : 0;
-  const total = days * selectedCar.priceDay;
+  const confirm = async () => {
+    if (!car || !carId || !datesValid || !car.available || car.pricePerDay <= 0) return;
+    setSubmitting(true); setError('');
+    try {
+      const rental = await adminApi<Rental>('/Rentals', {
+        method: 'POST',
+        body: JSON.stringify({ licencePlate: car.licencePlate, rentStartDate: from, rentEndDate: to }),
+      });
+      navigate(rentalPaths.confirmed(car.licencePlate), { state: { rental } });
+    } catch (cause) { setError(apiError(cause)); }
+    finally { setSubmitting(false); }
+  };
 
-  return (
-    <div className="page-in p-4 sm:p-6 pb-24 md:pb-6 max-w-xl mx-auto">
-      <button onClick={() => navigate(rentalPaths.detail(selectedCar.id))} className="btn btn-ghost btn-sm mb-4">← Back</button>
-      <h1 className="font-bold text-xl mb-5" style={{ color: 'var(--text)' }}>Rental Checkout</h1>
-      <div className="card flex gap-3 mb-4">
-        <div className="w-20 h-16 rounded-lg overflow-hidden flex-shrink-0" style={{ background: 'var(--surface-2)' }}>
-          <img src={`https://images.unsplash.com/${selectedCar.img}?w=160&h=110&fit=crop&auto=format`} alt={selectedCar.brand} className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <div className="font-bold" style={{ color: 'var(--text)' }}>{selectedCar.brand} {selectedCar.model}</div>
-          <div className="text-sm" style={{ color: 'var(--text-3)' }}>{selectedCar.category} · {selectedCar.transmission}</div>
-          <div className="text-sm font-mono font-bold mt-1" style={{ color: 'var(--primary)' }}>EGP {selectedCar.priceDay}/day</div>
-        </div>
+  if (!carId) return <Navigate to={ROUTES.customer.rentals} replace />;
+  return <div className="page-in p-4 sm:p-6 pb-6 max-w-xl mx-auto">
+    <button onClick={() => navigate(rentalPaths.detail(carId), { state: { from, to } })} className="btn btn-ghost btn-sm mb-4">← Back to vehicle</button>
+    <h1 className="font-bold text-xl mb-5" style={{ color: 'var(--text)' }}>Rental Checkout</h1>
+    {error && <div className="card mb-4 text-sm" role="alert" style={{ color: 'var(--sos)' }}>{error}</div>}
+    {loadingCar && !car ? <div className="card text-sm">Loading vehicle and date availability…</div> : car && <>
+      <div className="card flex gap-3 items-center mb-4"><div className="w-20 h-16 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}><Icon name="car" size={34} /></div><div><div className="font-bold" style={{ color: 'var(--text)' }}>{car.carCompany} {car.model}</div><div className="text-sm font-mono" style={{ color: 'var(--text-3)' }}>{car.licencePlate} · {car.color}</div><div className="text-sm font-mono font-bold mt-1" style={{ color: 'var(--primary)' }}>EGP {car.pricePerDay} per day</div></div></div>
+      <div className="card mb-4 space-y-4"><div className="grid grid-cols-2 gap-4"><label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Pick-up date<input type="date" className="inp mt-2" value={from} min={today} onChange={e => setFrom(e.target.value)} /></label><label className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>Return date<input type="date" className="inp mt-2" value={to} min={from || today} onChange={e => setTo(e.target.value)} /></label></div>
+        {from && to && to < from && <p className="text-sm" style={{ color: 'var(--sos)' }}>Return date must be on or after pick-up.</p>}
+        {datesValid && <div className="pt-3 border-t space-y-2" style={{ borderColor: 'var(--border)' }}><div className="flex justify-between text-sm"><span style={{ color: 'var(--text-3)' }}>EGP {car.pricePerDay} × {days} inclusive days</span><span style={{ color: 'var(--text)' }}>EGP {estimate.toLocaleString()}</span></div><div className="flex justify-between font-bold text-base pt-2 border-t" style={{ borderColor: 'var(--border)', color: 'var(--primary)' }}><span>Estimated total</span><span className="font-mono">EGP {estimate.toLocaleString()}</span></div></div>}
       </div>
-      <div className="card mb-4 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Pick-up Date">
-            <input type="date" className="inp" value={from} min={new Date().toISOString().split('T')[0]} onChange={e => setFrom(e.target.value)} />
-          </Field>
-          <Field label="Return Date">
-            <input type="date" className="inp" value={to} min={from || new Date().toISOString().split('T')[0]} onChange={e => setTo(e.target.value)} />
-          </Field>
-        </div>
-        {days > 0 && (
-          <div className="pt-3 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-3)' }}>EGP {selectedCar.priceDay} × {days} days</span><span style={{ color: 'var(--text)' }}>EGP {selectedCar.priceDay * days}</span></div>
-            <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-3)' }}>Insurance</span><span style={{ color: 'var(--text)' }}>EGP 200</span></div>
-            <div className="flex justify-between font-bold text-base pt-2 border-t" style={{ borderColor: 'var(--border)', color: 'var(--primary)' }}>
-              <span>Total</span><span className="font-mono">EGP {total + 200}</span>
-            </div>
-          </div>
-        )}
-      </div>
-      <button onClick={() => from && to && days > 0 && navigate(rentalPaths.confirmed(selectedCar.id), {
-        state: { from, to, days, total, bookingRef } satisfies RentalConfirmation,
-      })} disabled={!from || !to || days <= 0}
-        className="btn btn-primary btn-lg w-full">✓ Confirm Rental</button>
-      <p className="text-center text-xs mt-3" style={{ color: 'var(--text-4)' }}>Free cancellation up to 24h before pick-up</p>
-    </div>
-  );
+      {datesValid && !loadingCar && car.available && <div className="card mb-4 text-sm" role="status" style={{ color: 'var(--s-completed)' }}>This vehicle is available for your selected dates.</div>}
+      {datesValid && !loadingCar && !car.available && <div className="card mb-4 text-sm" role="alert" style={{ color: 'var(--sos)' }}>This vehicle is already reserved for part of your selected dates. Choose different dates or another car.</div>}
+      {car.pricePerDay <= 0 && <div className="card mb-4 text-sm" role="alert" style={{ color: 'var(--sos)' }}>This vehicle has no daily price and cannot be reserved yet.</div>}
+      <button onClick={() => void confirm()} disabled={!datesValid || !car.available || car.pricePerDay <= 0 || loadingCar || submitting} className="btn btn-primary btn-lg w-full">{submitting ? 'Creating reservation…' : 'Confirm Rental'}</button>
+      <p className="text-center text-xs mt-3" style={{ color: 'var(--text-4)' }}>The total is calculated by the backend from the database daily price and inclusive rental dates.</p>
+    </>}
+  </div>;
 }

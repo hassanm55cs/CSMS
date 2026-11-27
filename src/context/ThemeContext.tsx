@@ -11,13 +11,15 @@ const ThemeCtx = createContext<ThemeCtxValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [dark, setDark] = useState(() =>
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-  );
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('csms-theme');
+    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const [lang, setLang] = useState<Lang>('en');
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('csms-theme', dark ? 'dark' : 'light');
   }, [dark]);
 
   useEffect(() => {

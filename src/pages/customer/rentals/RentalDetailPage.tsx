@@ -1,57 +1,44 @@
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '../../../components/ui/Badge';
-import { RENTAL_FLEET } from '../../../data/mock-data';
+import { Icon } from '../../../components/ui/Icon';
 import { ROUTES, rentalPaths } from '../../../routes/paths';
+import { adminApi } from '../../../utils/adminApi';
+
+type Reservation = { rentStartDate: string; rentEndDate: string };
+type RentalCar = { licencePlate: string; color: string; noOfCylinders: number; fuelType: string; engineType: string; manufactureDate: string; carCompany: string; model: string; pricePerDay: number; status: string; available: boolean; reservations: Reservation[] };
+type Dates = { from?: string; to?: string };
+const apiError = (e: unknown) => e instanceof Error ? e.message : 'Could not load this rental car.';
 
 export default function RentalDetailPage() {
-  const navigate = useNavigate();
-  const { carId } = useParams();
-  const selectedCar = RENTAL_FLEET.find(c => String(c.id) === carId);
-  if (!selectedCar) return <Navigate to={ROUTES.customer.rentals} replace />;
+  const navigate = useNavigate(); const location = useLocation(); const { carId } = useParams();
+  const dates = (location.state as Dates | null) ?? {};
+  const [car, setCar] = useState<RentalCar | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  useEffect(() => {
+    if (!carId) return;
+    let active = true; setLoading(true); setError('');
+    const query = new URLSearchParams();
+    if (dates.from) query.set('fromDate', dates.from);
+    if (dates.to) query.set('toDate', dates.to);
+    const queryString = query.toString();
+    adminApi<RentalCar>('/rental-cars/' + encodeURIComponent(carId) + (queryString ? '?' + queryString : ''))
+      .then(result => { if (active) setCar(result); })
+      .catch(cause => { if (active) setError(apiError(cause)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [carId, dates.from, dates.to]);
 
-  return (
-    <div className="page-in p-4 sm:p-6 pb-24 md:pb-6 max-w-2xl mx-auto">
-      <button onClick={() => navigate(ROUTES.customer.rentals)} className="btn btn-ghost btn-sm mb-4">← Back to Fleet</button>
-      <div className="rounded-2xl overflow-hidden mb-4 h-52 relative" style={{ background: 'var(--surface-2)' }}>
-        <img src={`https://images.unsplash.com/${selectedCar.img}?w=800&h=400&fit=crop&auto=format`}
-          alt={`${selectedCar.brand} ${selectedCar.model}`} className="w-full h-full object-cover" />
-        <div className="absolute top-3 right-3"><Badge status={selectedCar.available ? 'available' : 'unavailable'} /></div>
-      </div>
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h1 className="font-bold text-2xl" style={{ color: 'var(--text)' }}>{selectedCar.brand} {selectedCar.model}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-3)' }}>{selectedCar.category} · {selectedCar.fuel} · {selectedCar.transmission}</p>
-        </div>
-        <div className="text-right">
-          <div className="font-bold text-2xl font-mono" style={{ color: 'var(--primary)' }}>EGP {selectedCar.priceDay}</div>
-          <div className="text-xs" style={{ color: 'var(--text-3)' }}>per day</div>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        {[
-          { icon: '💺', label: `${selectedCar.seats} Seats` },
-          { icon: '⚡', label: selectedCar.fuel },
-          { icon: '🛣️', label: `${selectedCar.km.toLocaleString()} km` },
-        ].map(spec => (
-          <div key={spec.label} className="card text-center" style={{ padding: '12px' }}>
-            <div className="text-xl mb-1">{spec.icon}</div>
-            <div className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>{spec.label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="card mb-4">
-        <div className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>Features</div>
-        <div className="flex flex-wrap gap-2">
-          {selectedCar.features.map(f => (
-            <span key={f} className="px-3 py-1 rounded-full text-sm" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}>{f}</span>
-          ))}
-        </div>
-      </div>
-      <button onClick={() => selectedCar.available && navigate(rentalPaths.checkout(selectedCar.id))}
-        disabled={!selectedCar.available}
-        className="btn btn-primary btn-lg w-full">
-        {selectedCar.available ? '🚗 Rent This Car' : 'Currently Unavailable'}
-      </button>
-    </div>
-  );
+  if (!carId) return <Navigate to={ROUTES.customer.rentals} replace />;
+  return <div className="page-in p-4 sm:p-6 pb-6 max-w-2xl mx-auto">
+    <button onClick={() => navigate(ROUTES.customer.rentals)} className="btn btn-ghost btn-sm mb-4">← Back to Fleet</button>
+    {error && <div className="card mb-4 text-sm" role="alert" style={{ color: 'var(--sos)' }}>{error}</div>}
+    {loading ? <div className="card text-sm">Loading vehicle…</div> : !car ? <div className="card text-sm">Vehicle not found.</div> : <>
+      <div className="rounded-2xl overflow-hidden mb-4 h-48 flex items-center justify-center relative" style={{ background: 'color-mix(in srgb, var(--primary) 12%, var(--surface-2))', color: 'var(--primary)' }}><Icon name="car" size={96} /><span className="absolute top-3 right-3"><Badge status={car.available ? 'available' : 'unavailable'} /></span></div>
+      <div className="flex items-start justify-between gap-4 mb-4"><div><h1 className="font-bold text-2xl" style={{ color: 'var(--text)' }}>{car.carCompany} {car.model}</h1><p className="text-sm mt-1 font-mono" style={{ color: 'var(--text-3)' }}>{car.licencePlate} · {car.color}</p></div><div className="text-right flex-shrink-0"><div className="font-bold text-2xl font-mono" style={{ color: 'var(--primary)' }}>EGP {car.pricePerDay}</div><div className="text-xs" style={{ color: 'var(--text-3)' }}>per day</div></div></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">{[{ label: 'Fuel', value: car.fuelType }, { label: 'Engine', value: car.engineType }, { label: 'Cylinders', value: String(car.noOfCylinders) }, { label: 'Year', value: car.manufactureDate?.slice(0, 4) ?? '—' }].map(spec => <div key={spec.label} className="card text-center" style={{ padding: 12 }}><div className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>{spec.label}</div><div className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>{spec.value}</div></div>)}</div>
+      {!car.available && <div className="card mb-4 text-sm" style={{ color: 'var(--sos)' }}>This car isn’t available for the selected dates. Check its reservation dates below or choose another car.</div>}
+      {car.reservations?.length > 0 && <section className="card mb-4"><h2 className="font-semibold text-sm mb-2" style={{ color: 'var(--text)' }}>Existing reservations</h2><ul className="space-y-1 text-xs" style={{ color: 'var(--text-3)' }}>{car.reservations.map((item, i) => <li key={i}>{item.rentStartDate} → {item.rentEndDate}</li>)}</ul></section>}
+      <button onClick={() => car.available && navigate(rentalPaths.checkout(car.licencePlate), { state: dates })} disabled={!car.available} className="btn btn-primary btn-lg w-full">{car.available ? 'Continue to Rental Dates' : 'Currently Unavailable'}</button>
+    </>}
+  </div>;
 }

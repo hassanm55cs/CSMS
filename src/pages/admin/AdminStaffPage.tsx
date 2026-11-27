@@ -1,38 +1,19 @@
-import { ADMIN_STAFF } from '../../data/admin-data';
-import { Badge } from '../../components/ui/Badge';
-
+import { useCallback, useEffect, useState } from 'react';
+import { adminApi, unwrapList } from '../../utils/adminApi';
+type Branch = { branchId: number; name: string; employees?: Array<{ employeeId: number; fullName: string; yearsOfExperience: number }> };
+type Employee = { employeeId: number; fullName: string; yearsOfExperience: number; branchId: number; branchName: string };
+type Form = { fullName: string; email: string; phoneNumber: string; facultly: string; yearsOfExperince: string; startingWorkDate: string; salary: string; branchId: string; password: string; confirmPassword: string };
+const empty = (): Form => ({ fullName: '', email: '', phoneNumber: '', facultly: '', yearsOfExperince: '0', startingWorkDate: new Date().toISOString().slice(0, 10), salary: '', branchId: '', password: '', confirmPassword: '' });
 export default function AdminStaffPage() {
-  return (
-    <div className="page-in p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="font-bold text-xl" style={{ color: 'var(--text)' }}>Staff Directory</h1>
-        <button className="btn btn-primary btn-sm">+ Add Employee</button>
-      </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {ADMIN_STAFF.map(s => (
-          <div key={s.id} className="card">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0"
-                  style={{ background: 'var(--primary)' }}>
-                  {s.name.split(' ').map(n => n[0]).join('')}
-                </div>
-                <div>
-                  <div className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{s.name}</div>
-                  <div className="text-xs" style={{ color: 'var(--text-3)' }}>{s.role}</div>
-                </div>
-              </div>
-              <Badge status={s.status} />
-            </div>
-            <div className="text-xs space-y-1" style={{ color: 'var(--text-3)' }}>
-              <div>📍 {s.branch}</div>
-              <div>📱 {s.phone}</div>
-              <div>📅 Joined {s.joined}</div>
-            </div>
-            <button className="btn btn-secondary btn-sm mt-3">✏️ Edit</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const [employees, setEmployees] = useState<Employee[]>([]); const [branches, setBranches] = useState<Branch[]>([]); const [form, setForm] = useState<Form>(empty()); const [show, setShow] = useState(false); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const list = unwrapList<Branch>(await adminApi('/branches?page=1&pageSize=100')); setBranches(list); const details = await Promise.all(list.map(async b => ({ b, detail: await adminApi<Branch>(`/branches/${b.branchId}`) }))); setEmployees(details.flatMap(({ b, detail }) => (detail.employees ?? []).map(x => ({ ...x, branchId: b.branchId, branchName: b.name })))); } catch (e) { setError(e instanceof Error ? e.message : 'Could not load employees.'); } finally { setLoading(false); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const create = async (e: React.FormEvent) => { e.preventDefault(); setSaving(true); setError(''); setMessage(''); try { const response = await adminApi<any>('/auth/register/employee', { method: 'POST', body: JSON.stringify({ ...form, yearsOfExperince: Number(form.yearsOfExperince), salary: Number(form.salary), branchId: Number(form.branchId) }) }); setMessage(response?.message ?? response?.Message ?? 'Employee registered.'); setShow(false); setForm(empty()); await load(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not register employee.'); } finally { setSaving(false); } };
+  const field = (key: keyof Form, label: string, type = 'text', required = true) => <label className="text-xs" style={{ color: 'var(--text-3)' }}>{label}<input className="inp mt-1" type={type} required={required} value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} /></label>;
+  return <div className="page-in p-4 sm:p-6"><div className="flex items-center justify-between mb-5"><div><h1 className="font-bold text-xl" style={{ color: 'var(--text)' }}>Employee Directory</h1><p className="text-sm" style={{ color: 'var(--text-3)' }}>Employees are read from branch details; the backend provides employee registration but no standalone employee list API.</p></div><button className="btn btn-primary btn-sm" onClick={() => { setForm(empty()); setShow(true); }}>Add Employee</button></div>
+    {error && <div className="card mb-3 text-sm" role="alert" style={{ color: 'var(--sos)' }}>{error}</div>}{message && <div className="card mb-3 text-sm" role="status" style={{ color: 'var(--s-completed)' }}>{message}</div>}
+    {show && <form onSubmit={create} className="card mb-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-3"><h2 className="font-semibold sm:col-span-2 lg:col-span-3">Register employee</h2>{field('fullName', 'Full name')}{field('email', 'Email', 'email')}{field('phoneNumber', 'Phone', 'tel')}{field('facultly', 'Faculty')}{field('yearsOfExperince', 'Years of experience', 'number')}{field('startingWorkDate', 'Starting work date', 'date')}{field('salary', 'Salary', 'number')}
+      <label className="text-xs" style={{ color: 'var(--text-3)' }}>Branch<select className="inp mt-1" required value={form.branchId} onChange={e => setForm({ ...form, branchId: e.target.value })}><option value="">Select branch</option>{branches.map(b => <option key={b.branchId} value={b.branchId}>{b.name}</option>)}</select></label>{field('password', 'Temporary password', 'password')}{field('confirmPassword', 'Confirm password', 'password')}<div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2"><button type="button" className="btn btn-secondary" onClick={() => setShow(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? 'Registering…' : 'Register Employee'}</button></div></form>}
+    {loading ? <div className="card text-sm">Loading employees…</div> : employees.length === 0 ? <div className="card text-sm" style={{ color: 'var(--text-3)' }}>No employees were returned in branch details.</div> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{employees.map(employee => <article key={`${employee.branchId}-${employee.employeeId}`} className="card"><div className="flex items-center gap-3 mb-3"><div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'var(--primary)' }}>{employee.fullName.split(' ').map(part => part[0]).join('').slice(0, 2)}</div><div><h2 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{employee.fullName}</h2><p className="text-xs" style={{ color: 'var(--text-3)' }}>Employee #{employee.employeeId}</p></div></div><div className="text-xs space-y-1" style={{ color: 'var(--text-3)' }}><div>{employee.branchName}</div><div>{employee.yearsOfExperience} years experience</div></div></article>)}</div>}
+  </div>;
 }

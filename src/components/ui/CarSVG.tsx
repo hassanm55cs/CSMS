@@ -4,9 +4,9 @@ export function CarSVG({ className, style }: { className?: string; style?: React
       {/* Road shadow */}
       <ellipse cx="110" cy="77" rx="92" ry="5" fill="rgba(0,0,0,0.12)" />
       {/* Body */}
-      <rect x="18" y="30" width="184" height="34" rx="9" fill="#2563EB" />
+      <rect className="car-body" x="18" y="30" width="184" height="34" rx="9" fill="#607A61" />
       {/* Cabin */}
-      <path d="M58 30 L76 11 L150 11 L170 30 Z" fill="#1D4ED8" />
+      <path className="car-cabin" d="M58 30 L76 11 L150 11 L170 30 Z" fill="#405B43" />
       {/* Windshield */}
       <path d="M81 28 L94 13 L149 13 L163 28 Z" fill="rgba(186,230,253,0.55)" />
       {/* Rear window */}
@@ -20,12 +20,12 @@ export function CarSVG({ className, style }: { className?: string; style?: React
       <rect x="90" y="46" width="11" height="3" rx="1.5" fill="rgba(255,255,255,0.5)" />
       <rect x="118" y="46" width="11" height="3" rx="1.5" fill="rgba(255,255,255,0.5)" />
       {/* Front bumper */}
-      <rect x="196" y="42" width="13" height="18" rx="5" fill="#1E40AF" />
+      <rect className="car-bumper" x="196" y="42" width="13" height="18" rx="5" fill="#304733" />
       {/* Headlight */}
       <ellipse cx="203" cy="47" rx="6" ry="4.5" fill="#FEF08A" opacity="0.95" />
       <ellipse cx="203" cy="47" rx="3" ry="2.2" fill="#FEFCE8" />
       {/* Rear bumper */}
-      <rect x="11" y="42" width="10" height="18" rx="5" fill="#1E3A8A" />
+      <rect className="car-bumper" x="11" y="42" width="10" height="18" rx="5" fill="#304733" />
       {/* Tail light */}
       <ellipse cx="16" cy="47" rx="5" ry="3.5" fill="#EF4444" opacity="0.9" />
       {/* Front wheel */}

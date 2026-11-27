@@ -12,6 +12,8 @@ const LoginPage = lazy(() => import('../pages/auth/LoginPage'));
 
 const DashboardPage      = lazy(() => import('../pages/customer/DashboardPage'));
 const ServiceBookingPage = lazy(() => import('../pages/customer/ServiceBookingPage'));
+const CustomerVisitsPage = lazy(() => import('../pages/customer/CustomerVisitsPage'));
+const CustomerNotificationsPage = lazy(() => import('../pages/customer/CustomerNotificationsPage'));
 const SOSPage            = lazy(() => import('../pages/customer/SOSPage'));
 const ProfilePage        = lazy(() => import('../pages/customer/ProfilePage'));
 const RentalsListPage     = lazy(() => import('../pages/customer/rentals/RentalsListPage'));
@@ -26,6 +28,12 @@ const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage'
 const AdminBranchesPage  = lazy(() => import('../pages/admin/AdminBranchesPage'));
 const AdminFleetPage     = lazy(() => import('../pages/admin/AdminFleetPage'));
 const AdminStaffPage     = lazy(() => import('../pages/admin/AdminStaffPage'));
+const AdminDriversPage   = lazy(() => import('../pages/admin/AdminDriversPage'));
+const AdminProductsPage  = lazy(() => import('../pages/admin/AdminProductsPage'));
+const AdminInventoryPage = lazy(() => import('../pages/admin/AdminInventoryPage'));
+const AdminSchedulesPage = lazy(() => import('../pages/admin/AdminSchedulesPage'));
+const AdminEmergenciesPage = lazy(() => import('../pages/admin/AdminEmergenciesPage'));
+  const AdminRecordsPage = lazy(() => import('../pages/admin/AdminRecordsPage'));
 const AdminReportsPage   = lazy(() => import('../pages/admin/AdminReportsPage'));
 
 export function AppRoutes() {
@@ -41,6 +49,8 @@ export function AppRoutes() {
         <Route path="/customer" element={<CustomerLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="book-service" element={<ServiceBookingPage />} />
+          <Route path="visits" element={<CustomerVisitsPage />} />
+          <Route path="notifications" element={<CustomerNotificationsPage />} />
           <Route path="rentals">
             <Route index element={<RentalsListPage />} />
             <Route path=":carId" element={<RentalDetailPage />} />
@@ -57,6 +67,7 @@ export function AppRoutes() {
         <Route path="/employee" element={<EmployeeLayout />}>
           <Route index element={<EmployeeDashboardPage />} />
           <Route path="visits" element={<EmployeeVisitsPage />} />
+          <Route path="history" element={<EmployeeVisitsPage />} />
         </Route>
       </Route>
 
@@ -67,6 +78,12 @@ export function AppRoutes() {
           <Route path="branches" element={<AdminBranchesPage />} />
           <Route path="fleet" element={<AdminFleetPage />} />
           <Route path="staff" element={<AdminStaffPage />} />
+          <Route path="drivers" element={<AdminDriversPage />} />
+          <Route path="products" element={<AdminProductsPage />} />
+          <Route path="inventory" element={<AdminInventoryPage />} />
+          <Route path="service-schedules" element={<AdminSchedulesPage />} />
+          <Route path="emergencies" element={<AdminEmergenciesPage />} />
+            <Route path="records" element={<AdminRecordsPage />} />
           <Route path="reports" element={<AdminReportsPage />} />
         </Route>
       </Route>

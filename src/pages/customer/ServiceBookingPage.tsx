@@ -1,251 +1,126 @@
-import { useState } from 'react';
-import { Badge } from '../../components/ui/Badge';
-import { EmptyState } from '../../components/ui/EmptyState';
-import { Field } from '../../components/ui/Field';
-import { MOCK_MY_CARS, SERVICE_TYPES, BRANCHES, MOCK_BOOKING_HISTORY, type BookingStatus } from '../../data/mock-data';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Icon } from '../../components/ui/Icon';
+import { adminApi, unwrapList } from '../../utils/adminApi';
+import { ROUTES } from '../../routes/paths';
+
+type CustomerCar = { licencePlate: string; carCompany: string; model: string; manufactureDate: string; currentKm: number; color: string };
+type Branch = { branchId: number; name: string; location: string };
+type StockProduct = { productId: number; name: string; price: number; quantity: number; warrantyMonths?: number };
+type BookingResult = { visitId: number; bookingReference: string; carLicencePlate: string; branchId: number; serviceDate: string; status: string };
+type Step = 1 | 2 | 3;
+
+const apiError = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+const localToday = () => {
+  const now = new Date();
+  return String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+};
 
 export default function ServiceBookingPage() {
-  const [step, setStep] = useState(1);
-  const [selectedCar, setSelectedCar]     = useState<number | null>(null);
-  const [selectedSvc, setSelectedSvc]     = useState<number | null>(null);
+  const navigate = useNavigate();
+  const [step, setStep] = useState<Step>(1);
+  const [cars, setCars] = useState<CustomerCar[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchProducts, setBranchProducts] = useState<StockProduct[]>([]);
+  const [selectedCar, setSelectedCar] = useState<string | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
-  const [date, setDate]       = useState('');
-  const [timeSlot, setTimeSlot] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [bookingRef] = useState(() => 'BK-' + Math.floor(2000 + Math.random() * 999));
-  const [filterStatus, setFilterStatus] = useState<BookingStatus | 'all'>('all');
+  const [date, setDate] = useState('');
+  const [booking, setBooking] = useState<BookingResult | null>(null);
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const branchRequestId = useRef(0);
 
-  const car = MOCK_MY_CARS.find(c => c.id === selectedCar);
-  const svc = SERVICE_TYPES.find(s => s.id === selectedSvc);
-  const branch = BRANCHES.find(b => b.id === selectedBranch);
+  const loadPage = useCallback(async () => {
+    setLoadingPage(true); setError('');
+    try {
+      const results = await Promise.all([adminApi('/cars?page=1&pageSize=100'), adminApi('/branches?page=1&pageSize=100')]);
+      setCars(unwrapList<CustomerCar>(results[0]));
+      setBranches(unwrapList<Branch>(results[1]));
+    } catch (cause) {
+      setError(apiError(cause, 'Could not load your cars and service branches.'));
+    } finally { setLoadingPage(false); }
+  }, []);
+  useEffect(() => { void loadPage(); }, [loadPage]);
 
-  const timeSlots = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'];
+  const car = cars.find(item => item.licencePlate === selectedCar) ?? null;
+  const selectedProducts = branchProducts.filter(item => selectedProductIds.includes(item.productId));
+  const productsTotal = selectedProducts.reduce((total, item) => total + item.price, 0);
+  const branch = branches.find(item => item.branchId === selectedBranch) ?? null;
+  const today = useMemo(localToday, []);
 
-  const confirm = async () => {
-    setLoading(true);
-    // API: POST /api/v1/bookings  { carId, serviceTypeId, branchId, date, time }
-    await new Promise(r => setTimeout(r, 1500));
-    setConfirmed(true);
-    setLoading(false);
+  const chooseBranch = async (branchId: number) => {
+    const requestId = ++branchRequestId.current;
+    setSelectedBranch(branchId); setSelectedProductIds([]); setBranchProducts([]); setError('');
+    if (!branchId) { setLoadingProducts(false); return; }
+    setLoadingProducts(true);
+    try {
+      const detail = await adminApi<any>('/branches/' + branchId);
+      const products = detail?.products ?? detail?.Products ?? [];
+      if (requestId === branchRequestId.current) setBranchProducts(products.filter((item: StockProduct) => item.quantity > 0));
+    } catch (cause) { if (requestId === branchRequestId.current) setError(apiError(cause, 'Could not load products available at this branch.')); }
+    finally { if (requestId === branchRequestId.current) setLoadingProducts(false); }
   };
 
-  const filteredHistory = filterStatus === 'all'
-    ? MOCK_BOOKING_HISTORY
-    : MOCK_BOOKING_HISTORY.filter(b => b.status === filterStatus);
+  const confirm = async () => {
+    if (!car || selectedProducts.length === 0 || !branch || !date) return;
+    setSubmitting(true); setError('');
+    try {
+      const result = await adminApi<BookingResult>('/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          carLicencePlate: car.licencePlate,
+          serviceProductIds: selectedProducts.map(item => item.productId),
+          branchId: branch.branchId,
+          serviceDate: date,
+        }),
+      });
+      setBooking(result); setStep(3);
+    } catch (cause) { setError(apiError(cause, 'Could not create the booking.')); }
+    finally { setSubmitting(false); }
+  };
 
-  const steps = ['Select Car', 'Service & Date', 'Review', 'Confirmed'];
+  const reset = () => {
+    setBooking(null); setStep(1); setSelectedCar(null); setSelectedProductIds([]); setSelectedBranch(null);
+    setBranchProducts([]); setDate(''); setError('');
+  };
 
-  if (confirmed) return (
+  if (booking) return (
     <div className="page-in p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-5"
-        style={{ background: 'var(--s-completed-bg)' }}>✅</div>
-      <h2 className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>Booking Confirmed!</h2>
-      <p className="mb-1" style={{ color: 'var(--text-3)' }}>{svc?.name} for {car?.brand} {car?.model}</p>
+      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: 'var(--s-completed-bg)', color: 'var(--s-completed)' }}><Icon name="check" size={36} /></div>
+      <h2 className="font-bold text-2xl mb-2" style={{ color: 'var(--text)' }}>Booking Confirmed</h2>
+      <p className="mb-1" style={{ color: 'var(--text-3)' }}>{selectedProducts.map(item => item.name).join(', ')} for {car?.carCompany} {car?.model}</p>
       <p className="mb-1" style={{ color: 'var(--text-3)' }}>{branch?.name}</p>
-      <p className="font-mono text-sm mb-4" style={{ color: 'var(--text-3)' }}>{date} at {timeSlot}</p>
-      <div className="card mb-5" style={{ background: 'var(--primary-light)', border: 'none' }}>
-        <span className="font-mono text-sm" style={{ color: 'var(--primary)' }}>Booking Ref: <strong>{bookingRef}</strong></span>
-      </div>
-      <div className="flex gap-3">
-        <button onClick={() => { setConfirmed(false); setStep(1); setSelectedCar(null); setSelectedSvc(null); }} className="btn btn-secondary">
-          Book Another
-        </button>
-        <button onClick={() => setStep(5)} className="btn btn-outline-primary">View History</button>
-      </div>
+      <p className="font-mono text-sm mb-4" style={{ color: 'var(--text-3)' }}>{booking.serviceDate}</p>
+      <div className="card mb-5"><span className="font-mono text-sm" style={{ color: 'var(--primary)' }}>Booking reference: <strong>{booking.bookingReference}</strong></span><div className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>Visit #{booking.visitId} · {booking.status}</div></div>
+      <div className="flex flex-wrap justify-center gap-3"><button onClick={reset} className="btn btn-secondary">Book Another</button><button onClick={() => navigate(ROUTES.customer.visits)} className="btn btn-primary">View Visits</button></div>
     </div>
   );
 
+  const steps = ['Select Car', 'Service & Date', 'Review'];
   return (
-    <div className="page-in p-4 sm:p-6 pb-24 md:pb-6 max-w-2xl mx-auto">
+    <div className="page-in p-4 sm:p-6 pb-6 max-w-2xl mx-auto">
       <h1 className="font-bold text-xl mb-5" style={{ color: 'var(--text)' }}>Book a Service</h1>
+      {error && <div className="card mb-4 text-sm" role="alert" style={{ color: 'var(--sos)' }}>{error}</div>}
+      {loadingPage ? <div className="card text-sm" style={{ color: 'var(--text-3)' }}>Loading your cars and branches…</div> : cars.length === 0 ? (
+        <div className="card text-center py-8"><div className="flex justify-center mb-3" style={{ color: 'var(--primary)' }}><Icon name="car" size={30} /></div><h2 className="font-semibold" style={{ color: 'var(--text)' }}>Add a car to get started</h2><p className="text-sm mt-1 mb-4" style={{ color: 'var(--text-3)' }}>Bookings are linked to one of your customer cars.</p><button className="btn btn-primary" onClick={() => navigate(ROUTES.customer.profile)}>Go to Profile</button></div>
+      ) : (
+        <>
+          <div className="mb-6"><div className="step-bar">{steps.map((label, index) => <div key={label} className="flex items-center flex-1"><div className={'step-dot ' + (index + 1 < step ? 'done' : index + 1 === step ? 'active' : '')}>{index + 1 < step ? '✓' : index + 1}</div>{index < steps.length - 1 && <div className={'step-line ' + (index + 1 < step ? 'done' : '')} />}</div>)}</div><div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--text-3)' }}>{steps.map(label => <span key={label}>{label}</span>)}</div></div>
 
-      {/* Step bar */}
-      {step <= 4 && (
-        <div className="mb-6">
-          <div className="step-bar">
-            {steps.slice(0, 3).map((s, i) => (
-              <div key={s} className="flex items-center flex-1">
-                <div className={`step-dot ${i + 1 < step ? 'done' : i + 1 === step ? 'active' : ''}`}
-                  role="status" aria-label={`Step ${i + 1}: ${s}`}>
-                  {i + 1 < step ? '✓' : i + 1}
-                </div>
-                <div className={`step-line ${i + 1 < step ? 'done' : ''}`} />
-              </div>
-            ))}
-            <div className={`step-dot ${step >= 4 ? 'done' : step === 3 ? 'active' : ''}`}
-              aria-label={`Step 4: ${steps[3]}`}>
-              {step >= 4 ? '✓' : 3}
-            </div>
-          </div>
-          <div className="flex justify-between mt-1.5 px-0.5">
-            {steps.slice(0,3).map((s, i) => (
-              <div key={s} className="flex-1 text-center text-xs" style={{ color: i + 1 <= step ? 'var(--primary)' : 'var(--text-4)' }}>{s}</div>
-            ))}
-            <div className="text-xs" style={{ color: step >= 3 ? 'var(--primary)' : 'var(--text-4)' }}>Review</div>
-          </div>
-        </div>
-      )}
+          {step === 1 && <div className="space-y-3"><h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Which customer car needs service?</h2>{cars.map(item => <button key={item.licencePlate} onClick={() => setSelectedCar(item.licencePlate)} className="w-full card card-hover flex items-center gap-4 text-left" style={{ borderColor: selectedCar === item.licencePlate ? 'var(--primary)' : undefined, borderWidth: selectedCar === item.licencePlate ? 2 : undefined }}><div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}><Icon name="car" size={28} /></div><div className="flex-1"><div className="font-semibold" style={{ color: 'var(--text)' }}>{item.carCompany} {item.model}</div><div className="text-sm font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>{item.licencePlate}</div><div className="text-xs mt-0.5" style={{ color: 'var(--text-4)' }}>{item.currentKm.toLocaleString()} km · {item.color}</div></div>{selectedCar === item.licencePlate && <Icon name="check" size={22} />}</button>)}<button onClick={() => setStep(2)} disabled={!selectedCar} className="btn btn-primary btn-lg w-full mt-2">Next →</button></div>}
 
-      {/* STEP 1: Select car */}
-      {step === 1 && (
-        <div className="space-y-3">
-          <h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Which car needs service?</h2>
-          {MOCK_MY_CARS.map(car => (
-            <button key={car.id} onClick={() => setSelectedCar(car.id)}
-              className={`w-full card card-hover flex items-center gap-4 text-left transition-all ${selectedCar === car.id ? 'border-blue-500' : ''}`}
-              style={{ borderColor: selectedCar === car.id ? 'var(--primary)' : undefined, borderWidth: '2px' }}>
-              <div className="w-16 h-14 rounded-lg overflow-hidden flex-shrink-0" style={{ background: 'var(--surface-2)' }}>
-                <img src={`https://images.unsplash.com/${car.img}?w=120&h=90&fit=crop&auto=format`}
-                  alt={car.brand} className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold" style={{ color: 'var(--text)' }}>{car.brand} {car.model} ({car.year})</div>
-                <div className="text-sm font-mono mt-0.5" style={{ color: 'var(--text-3)' }}>{car.plate}</div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--text-4)' }}>{car.km.toLocaleString()} km</div>
-              </div>
-              {selectedCar === car.id && <span className="text-2xl">✅</span>}
-            </button>
-          ))}
-          <button
-            onClick={() => step === 1 && selectedCar && setStep(2)}
-            disabled={!selectedCar}
-            className="btn btn-primary btn-lg w-full mt-2">Next →</button>
-        </div>
-      )}
+          {step === 2 && <div className="space-y-5"><h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>Choose branch, service & date</h2>
+            <label className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>Branch<select className="inp mt-2" value={selectedBranch ?? ''} onChange={event => void chooseBranch(Number(event.target.value))}><option value="">Select a branch…</option>{branches.map(item => <option key={item.branchId} value={item.branchId}>{item.name} · {item.location}</option>)}</select></label>
+            <div><label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Service products <span className="text-xs font-normal" style={{ color: 'var(--text-4)' }}>(select all that you need)</span></label>{!selectedBranch ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Choose a branch to see products currently in stock.</p> : loadingProducts ? <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading available products…</p> : branchProducts.length === 0 ? <p className="card text-sm" style={{ color: 'var(--text-3)' }}>No service products are currently in stock at this branch.</p> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{branchProducts.map(item => { const selected = selectedProductIds.includes(item.productId); return <button key={item.productId} type="button" aria-pressed={selected} onClick={() => setSelectedProductIds(current => selected ? current.filter(id => id !== item.productId) : [...current, item.productId])} className="text-left p-3 rounded-xl border-2 transition-all" style={{ background: selected ? 'var(--primary-light)' : 'color-mix(in srgb, var(--surface) 78%, transparent)', borderColor: selected ? 'var(--primary)' : 'var(--border)', backdropFilter: 'blur(12px)' }}><div className="flex items-start justify-between gap-2"><span className="text-sm font-semibold" style={{ color: selected ? 'var(--primary)' : 'var(--text)' }}>{item.name}</span>{selected && <Icon name="check" size={17} />}</div><div className="text-xs mt-1 font-mono" style={{ color: 'var(--text-3)' }}>EGP {item.price} · {item.quantity} in stock</div></button>; })}</div>}</div>
+            <label className="block text-sm font-medium" style={{ color: 'var(--text-2)' }}>Date<input type="date" className="inp mt-2" value={date} min={today} onChange={event => setDate(event.target.value)} /></label>
+            <div className="flex gap-3"><button onClick={() => setStep(1)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => setStep(3)} disabled={selectedProductIds.length === 0 || !selectedBranch || !date} className="btn btn-primary flex-1">Review →</button></div>
+          </div>}
 
-      {/* STEP 2: Service + branch + date + time */}
-      {step === 2 && (
-        <div className="space-y-5">
-          <h2 className="font-semibold text-base" style={{ color: 'var(--text)' }}>Choose service & schedule</h2>
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Service Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {SERVICE_TYPES.map(svc => (
-                <button key={svc.id} onClick={() => setSelectedSvc(svc.id)}
-                  className={`p-3 rounded-xl border-2 text-left transition-all ${selectedSvc === svc.id ? '' : ''}`}
-                  style={{
-                    background: selectedSvc === svc.id ? 'var(--primary-light)' : 'var(--surface-2)',
-                    borderColor: selectedSvc === svc.id ? 'var(--primary)' : 'var(--border)',
-                  }}>
-                  <div className="text-xl mb-1">{svc.icon}</div>
-                  <div className="text-sm font-semibold" style={{ color: selectedSvc === svc.id ? 'var(--primary)' : 'var(--text)' }}>{svc.name}</div>
-                  <div className="text-xs mt-0.5 font-mono" style={{ color: 'var(--text-3)' }}>EGP {svc.price}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-          <Field label="Branch">
-            <select className="inp" value={selectedBranch ?? ''} onChange={e => setSelectedBranch(Number(e.target.value))}>
-              <option value="">Select a branch…</option>
-              {BRANCHES.map(b => <option key={b.id} value={b.id}>{b.name} ★ {b.rating}</option>)}
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Date">
-              <input type="date" className="inp" value={date} min={new Date().toISOString().split('T')[0]}
-                onChange={e => setDate(e.target.value)} />
-            </Field>
-            <div>
-              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-2)' }}>Time Slot</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {timeSlots.map(t => (
-                  <button key={t} onClick={() => setTimeSlot(t)}
-                    className={`text-sm py-2 rounded-lg border font-mono transition-all ${timeSlot === t ? '' : ''}`}
-                    style={{
-                      background: timeSlot === t ? 'var(--primary)' : 'var(--surface-2)',
-                      borderColor: timeSlot === t ? 'var(--primary)' : 'var(--border)',
-                      color: timeSlot === t ? 'white' : 'var(--text)',
-                    }}>{t}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => setStep(1)} className="btn btn-secondary flex-1">← Back</button>
-            <button onClick={() => selectedSvc && selectedBranch && date && timeSlot && setStep(3)}
-              disabled={!selectedSvc || !selectedBranch || !date || !timeSlot}
-              className="btn btn-primary flex-1">Review →</button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3: Review */}
-      {step === 3 && (
-        <div className="space-y-4">
-          <h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Review your booking</h2>
-          <div className="card space-y-3">
-            {[
-              { label: 'Car', value: `${car?.brand} ${car?.model} (${car?.plate})` },
-              { label: 'Service', value: `${svc?.icon} ${svc?.name}` },
-              { label: 'Branch', value: branch?.name },
-              { label: 'Date & Time', value: `${date} at ${timeSlot}` },
-              { label: 'Duration', value: `~${svc?.durationMin} minutes` },
-            ].map(row => (
-              <div key={row.label} className="flex justify-between items-center py-2 border-b last:border-0" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-sm" style={{ color: 'var(--text-3)' }}>{row.label}</span>
-                <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{row.value}</span>
-              </div>
-            ))}
-          </div>
-          <div className="card flex items-center justify-between" style={{ background: 'var(--primary-light)', border: '1px solid var(--blue-200)' }}>
-            <span className="font-semibold" style={{ color: 'var(--primary)' }}>Estimated Cost</span>
-            <span className="font-bold text-xl font-mono" style={{ color: 'var(--primary)' }}>EGP {svc?.price}</span>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => setStep(2)} className="btn btn-secondary flex-1">← Back</button>
-            <button onClick={confirm} disabled={loading} className="btn btn-primary flex-1">
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
-                  Confirming…
-                </span>
-              ) : '✓ Confirm Booking'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Booking History */}
-      {(step === 5 || step > 4) && (
-        <div className="mt-6">
-          <div className="divider mb-6" />
-          <h2 className="font-semibold text-base mb-3" style={{ color: 'var(--text)' }}>Booking History</h2>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            {(['all', 'pending', 'confirmed', 'in-progress', 'completed', 'cancelled'] as const).map(s => (
-              <button key={s} onClick={() => setFilterStatus(s)}
-                className={`btn btn-sm ${filterStatus === s ? 'btn-primary' : 'btn-secondary'}`}>
-                {s.replace('-', ' ')}
-              </button>
-            ))}
-          </div>
-          {filteredHistory.length === 0 ? (
-            <EmptyState icon="📭" title="No bookings" desc="No bookings match this filter." />
-          ) : (
-            <div className="space-y-3">
-              {filteredHistory.map(b => (
-                <div key={b.id} className="card flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>{b.serviceType}</span>
-                      <Badge status={b.status} />
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-3)' }}>{b.car} · {b.branch}</div>
-                    <div className="text-xs font-mono mt-0.5" style={{ color: 'var(--text-4)' }}>{b.date} · Ref: {b.id}</div>
-                  </div>
-                  {b.cost > 0 && <div className="font-mono font-bold text-sm flex-shrink-0" style={{ color: 'var(--text)' }}>EGP {b.cost}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Show history link after step 1 */}
-      {step <= 3 && (
-        <button onClick={() => setStep(5)} className="w-full text-center text-sm mt-4" style={{ color: 'var(--text-3)' }}>
-          View booking history →
-        </button>
+          {step === 3 && <div className="space-y-4"><h2 className="font-semibold text-base mb-4" style={{ color: 'var(--text)' }}>Review your booking</h2><div className="card space-y-3">{[{ label: 'Car', value: car ? car.carCompany + ' ' + car.model + ' (' + car.licencePlate + ')' : '' }, { label: 'Services', value: selectedProducts.map(item => `${item.name} (EGP ${item.price})`).join(', ') }, { label: 'Branch', value: branch?.name ?? '' }, { label: 'Date', value: date }].map(row => <div key={row.label} className="flex justify-between items-center gap-3 py-2 border-b last:border-0" style={{ borderColor: 'var(--border)' }}><span className="text-sm" style={{ color: 'var(--text-3)' }}>{row.label}</span><span className="text-sm font-semibold text-right" style={{ color: 'var(--text)' }}>{row.value}</span></div>)}</div><div className="card flex items-center justify-between"><span className="font-semibold" style={{ color: 'var(--primary)' }}>Selected products total</span><span className="font-bold text-xl font-mono" style={{ color: 'var(--primary)' }}>EGP {productsTotal}</span></div><div className="flex gap-3"><button onClick={() => setStep(2)} className="btn btn-secondary flex-1">← Back</button><button onClick={() => void confirm()} disabled={submitting} className="btn btn-primary flex-1">{submitting ? 'Booking…' : 'Confirm Booking'}</button></div></div>}
+        </>
       )}
     </div>
   );

@@ -5,6 +5,30 @@ import { Field } from '../../components/ui/Field';
 import { Toast } from '../../components/ui/Toast';
 import { useAuth } from '../../context/AuthContext';
 import { useT } from '../../i18n/useT';
+import { Icon } from '../../components/ui/Icon';
+
+const supportedRoles: Role[] = ['customer', 'employee', 'admin'];
+const roleClaimNames = [
+  'role',
+  'roles',
+  'http://schemas.microsoft.com/ws/2008/06/identity/claims/role',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role',
+];
+
+function getRoleFromToken(token: string): Role | null {
+  try {
+    const payloadPart = token.split('.')[1];
+    if (!payloadPart) return null;
+    const base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as Record<string, unknown>;
+    const roleClaim = roleClaimNames.map(name => payload[name]).find(value => value !== undefined);
+    const claims = Array.isArray(roleClaim) ? roleClaim : [roleClaim];
+    const role = claims.find(value => typeof value === 'string' && supportedRoles.includes(value.toLowerCase() as Role));
+    return typeof role === 'string' ? role.toLowerCase() as Role : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function LoginPage() {
   const t = useT();
@@ -12,12 +36,12 @@ export default function LoginPage() {
   const { login: onLogin } = useAuth();
 
   const [mode, setMode]       = useState<'login' | 'register'>('login');
-  const [role, setRole]       = useState<Role>('customer');
+  const [registerRole, setRegisterRole] = useState<'customer' | 'driver'>('customer');
   const [animState, setAnim]  = useState<'idle' | 'right' | 'left' | 'exit'>('idle');
-  const [formVisible, setFV]  = useState(true);
+  const [hasSwitchedMode, setHasSwitchedMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast]     = useState<{ msg: string; type: 'success'|'error'|'info' } | null>(null);
-  const carRef = useRef<HTMLDivElement>(null);
+  const modeSwitchLock = useRef(false);
 
   // Login form state
   const [email, setEmail]       = useState('');
@@ -29,17 +53,21 @@ export default function LoginPage() {
   const [rName, setRName]       = useState('');
   const [rEmail, setREmail]     = useState('');
   const [rPhone, setRPhone]     = useState('');
+  const [rAddress, setRAddress] = useState('');
+  const [rBranchId, setRBranchId] = useState('');
+  const [rStartWorkDate, setRStartWorkDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [rPass, setRPass]       = useState('');
   const [rPassC, setRPassC]     = useState('');
   const [showRPw, setShowRPw]   = useState(false);
 
   const switchMode = (to: 'login' | 'register') => {
-    if (animState !== 'idle') return;
+    if (modeSwitchLock.current || animState !== 'idle' || to === mode) return;
+    modeSwitchLock.current = true;
+    setHasSwitchedMode(true);
     const dir = to === 'register' ? 'right' : 'left';
     setAnim(dir);
-    setFV(false);
-    setTimeout(() => { setMode(to); setFV(true); }, 400);
-    setTimeout(() => setAnim('idle'), 850);
+    window.setTimeout(() => setMode(to), 400);
+    window.setTimeout(() => { setAnim('idle'); modeSwitchLock.current = false; }, 850);
   };
 
   const validateLogin = () => {
@@ -56,11 +84,23 @@ export default function LoginPage() {
     const errs = validateLogin();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setLoading(true);
-    // API: POST /api/v1/auth/login  { email, password }
-    // Returns: { token: string, user: UserDto, role: Role }
-    await new Promise(r => setTimeout(r, 1200));
-    setAnim('exit');
-    setTimeout(() => onLogin(role), 650);
+    try {
+      const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) || 'https://localhost:7260').replace(/\/$/, '');
+      const response = await fetch(`${apiUrl}/Login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const result = await response.json().catch(() => null);
+      const token = result?.token ?? result?.Token;
+      if (!response.ok || !token) throw new Error(result?.error ?? result?.Error ?? 'Unable to sign in. Check your email and password.');
+      const role = getRoleFromToken(token);
+      if (!role) throw new Error('This account role is not supported by the available workspaces.');
+      setAnim('exit');
+      setTimeout(() => onLogin(role, token), 650);
+    } catch (error) {
+      setToast({ msg: error instanceof Error ? error.message : 'Unable to connect to the service.', type: 'error' });
+      setLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -69,68 +109,72 @@ export default function LoginPage() {
     if (!rName)  errs.rName  = 'Name is required';
     if (!rEmail) errs.rEmail = 'Email is required';
     if (!rPhone) errs.rPhone = 'Phone is required';
+    if (registerRole === 'customer' && !rAddress) errs.rAddress = 'Address is required';
+    if (registerRole === 'driver' && (!rBranchId || Number(rBranchId) < 1)) errs.rBranchId = 'Enter a valid branch ID';
     if (!rPass)  errs.rPass  = 'Password is required';
+    else if (rPass.length < 8) errs.rPass = 'Password must be at least 8 characters';
     if (rPass !== rPassC) errs.rPassC = 'Passwords do not match';
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setLoading(true);
-    // API: POST /api/v1/auth/register  { fullName, email, phone, password }
-    await new Promise(r => setTimeout(r, 1400));
-    setToast({ msg: 'Account created! Signing you in…', type: 'success' });
-    setTimeout(() => { setAnim('exit'); setTimeout(() => onLogin(role), 650); }, 800);
+    try {
+      const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) || 'https://localhost:7260').replace(/\/$/, '');
+      const isDriver = registerRole === 'driver';
+      const response = await fetch(`${apiUrl}/auth/register/${isDriver ? 'Driver' : 'customer'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isDriver
+          ? { fullName: rName, email: rEmail, phoneNumber: rPhone, branchId: Number(rBranchId), startWorkDate: rStartWorkDate, password: rPass, confirmPassword: rPassC }
+          : { fullName: rName, email: rEmail, phoneNumber: rPhone, address: rAddress, password: rPass, confirmPassword: rPassC }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errors = result?.errors ?? result?.Errors;
+        throw new Error(Array.isArray(errors) ? errors.join(' ') : result?.message ?? 'Unable to create the account.');
+      }
+      setToast({ msg: isDriver ? 'Driver application submitted. An administrator must approve it before access.' : 'Account created. Please sign in.', type: 'success' });
+      switchMode('login');
+    } catch (error) {
+      setToast({ msg: error instanceof Error ? error.message : 'Unable to connect to the service.', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const roles: { id: Role; label: string; icon: string }[] = [
-    { id: 'customer', label: t.customer, icon: '👤' },
-    { id: 'employee', label: t.employee, icon: '🔧' },
-    { id: 'admin',    label: t.admin,    icon: '⚙️'  },
-  ];
-
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
+    <div className="auth-page min-h-screen flex">
       {/* ── Left panel ─────────────────────────────────────── */}
-      <div className="hidden lg:flex flex-col justify-between relative overflow-hidden w-[55%]"
-        style={{ background: 'linear-gradient(145deg, #1E3A8A 0%, #2563EB 50%, #1D4ED8 100%)' }}>
+      <div className="auth-showroom hidden lg:flex flex-col justify-between relative overflow-hidden w-[55%]">
         {/* Decorative circles */}
-        <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full opacity-10"
-          style={{ background: 'white' }} />
-        <div className="absolute bottom-20 -right-10 w-60 h-60 rounded-full opacity-10"
-          style={{ background: 'white' }} />
+        <div className="auth-orbit auth-orbit-one" />
+        <div className="auth-orbit auth-orbit-two" />
         <div className="relative z-10 p-12">
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center auth-brand-mark"
+              style={{ background: 'rgba(255,255,255,0.12)' }}>
               <svg width="20" height="20" viewBox="0 0 220 80" fill="white"><rect x="18" y="30" width="184" height="34" rx="9" /><circle cx="58" cy="64" r="14" /><circle cx="168" cy="64" r="14" /></svg>
             </div>
             <span className="text-white font-bold text-xl tracking-tight">{t.appName}</span>
           </div>
-          <h1 className="text-white font-bold leading-tight mb-4" style={{ fontSize: '40px' }}>
+          <div className="auth-kicker">CSMS · DRIVE WITH CONFIDENCE</div>
+          <h1 className="text-white font-bold leading-tight mb-4 auth-headline" style={{ fontSize: '40px' }}>
             {t.tagline}
           </h1>
-          <p className="text-blue-200 text-base leading-relaxed">
+          <p className="auth-showroom-copy text-base leading-relaxed">
             Book maintenance, rent a car, or request emergency help — all in one place.
           </p>
           <div className="flex gap-8 mt-10">
             {[['3', 'Branches'], ['48', 'Fleet Cars'], ['24/7', 'Support']].map(([n, l]) => (
               <div key={l}>
                 <div className="text-white font-bold text-2xl">{n}</div>
-                <div className="text-blue-300 text-sm">{l}</div>
+                <div className="auth-showroom-stat text-sm">{l}</div>
               </div>
             ))}
           </div>
         </div>
-        {/* Car illustration area */}
-        <div className="relative z-10 px-12 pb-0">
-          <img
-            src="https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=700&h=350&fit=crop&auto=format"
-            alt="Luxury car"
-            className="w-full rounded-t-2xl object-cover opacity-60"
-            style={{ height: '200px' }}
-          />
-        </div>
       </div>
 
       {/* ── Right panel ────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative" style={{ background: 'var(--surface)' }}>
+      <div className="auth-form-side flex-1 flex flex-col relative">
         {/* Mobile header */}
         <div className="lg:hidden flex items-center gap-2 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--primary)' }}>
@@ -140,22 +184,11 @@ export default function LoginPage() {
         </div>
 
         {/* Form */}
-        <div className="flex-1 flex items-center justify-center p-6 pb-28 lg:pb-6">
-          <div className="w-full max-w-sm">
-            {/* Role selector */}
-            <div className="grid grid-cols-3 gap-2 mb-6">
-              {roles.map(r => (
-                <button key={r.id} onClick={() => setRole(r.id)}
-                  className={`p-3 rounded-xl border-2 text-center transition-all ${role === r.id ? 'border-blue-500' : 'border-transparent'}`}
-                  style={{ background: role === r.id ? 'var(--primary-light)' : 'var(--surface-2)' }}>
-                  <div className="text-xl mb-0.5">{r.icon}</div>
-                  <div className="text-xs font-semibold" style={{ color: role === r.id ? 'var(--primary)' : 'var(--text-3)' }}>{r.label}</div>
-                </button>
-              ))}
-            </div>
-
+        <div className="auth-form-scroll flex-1 flex items-center justify-center p-6 pb-28 lg:pb-6">
+          <div className={`auth-form-card auth-form-card--${mode} ${hasSwitchedMode ? '' : 'is-initial'} ${animState === 'right' || animState === 'left' ? 'is-switching' : ''} w-full max-w-sm`}>
+            <div className="auth-form-topline"><span className="auth-status-dot" /> SECURE ACCOUNT PORTAL</div>
             {/* Form content */}
-            <div className={`form-panel ${!formVisible ? 'exiting' : 'entering'}`}>
+            <div className="form-panel">
               {mode === 'login' ? (
                 <>
                   <h2 className="font-bold text-2xl mb-1" style={{ color: 'var(--text)' }}>{t.signIn}</h2>
@@ -175,7 +208,9 @@ export default function LoginPage() {
                         <button type="button" onClick={() => setShowPw(v => !v)}
                           className="absolute inset-y-0 right-3 flex items-center" style={{ color: 'var(--text-4)' }}
                           aria-label={showPw ? 'Hide password' : 'Show password'}>
-                          {showPw ? '🙈' : '👁'}
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                            {showPw ? <><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c5 0 8.5 4.5 9 7-.2 1-1 2-2 3"/><path d="M6.2 6.2C3.8 7.6 2.3 10 2 12c.5 2.5 4 7 10 7 1 0 2-.2 2.8-.5"/></> : <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></>}
+                          </svg>
                         </button>
                       </div>
                     </Field>
@@ -198,8 +233,20 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
+                  <div className="auth-register-roles grid grid-cols-2 gap-2 mb-5" aria-label="Account type">
+                    {(['customer', 'driver'] as const).map(option => (
+                      <button key={option} type="button" onClick={() => setRegisterRole(option)}
+                        aria-pressed={registerRole === option}
+                        className={`auth-register-role rounded-xl border p-3 flex items-center justify-center gap-2 text-sm font-semibold transition-all ${registerRole === option ? 'is-selected' : ''}`}>
+                        <Icon name={option === 'customer' ? 'user' : 'driver'} size={18} />
+                        {option === 'customer' ? t.customer : 'Driver'}
+                      </button>
+                    ))}
+                  </div>
                   <h2 className="font-bold text-2xl mb-1" style={{ color: 'var(--text)' }}>{t.createAccount}</h2>
-                  <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>Join CSMS today</p>
+                  <p className="text-sm mb-5" style={{ color: 'var(--text-3)' }}>
+                    {registerRole === 'customer' ? 'Join CSMS today' : 'Enter your branch and start date. An administrator sets salary and approves driver access.'}
+                  </p>
                   <form onSubmit={handleRegister} noValidate className="space-y-3">
                     <Field label={t.fullName} error={errors.rName}>
                       <input type="text" value={rName} onChange={e => setRName(e.target.value)}
@@ -215,6 +262,23 @@ export default function LoginPage() {
                       <input type="tel" value={rPhone} onChange={e => setRPhone(e.target.value)}
                         className={`inp ${errors.rPhone ? 'error' : ''}`} placeholder="+20 100 000 0000" />
                     </Field>
+                    {registerRole === 'customer' ? (
+                      <Field label={t.address} error={errors.rAddress}>
+                        <input type="text" value={rAddress} onChange={e => setRAddress(e.target.value)}
+                          className={`inp ${errors.rAddress ? 'error' : ''}`} placeholder="Street, city"
+                          autoComplete="street-address" />
+                      </Field>
+                    ) : (
+                      <>
+                        <Field label="Branch ID" error={errors.rBranchId}>
+                          <input type="number" min="1" value={rBranchId} onChange={e => setRBranchId(e.target.value)}
+                            className={`inp ${errors.rBranchId ? 'error' : ''}`} placeholder="1" />
+                        </Field>
+                        <Field label="Start Work Date">
+                          <input type="date" value={rStartWorkDate} onChange={e => setRStartWorkDate(e.target.value)} className="inp" />
+                        </Field>
+                      </>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                       <Field label={t.password} error={errors.rPass}>
                         <div className="inp-wrap">
@@ -222,7 +286,7 @@ export default function LoginPage() {
                             className={`inp ${errors.rPass ? 'error' : ''}`} placeholder="••••••••" />
                           <button type="button" onClick={() => setShowRPw(v => !v)}
                             className="absolute inset-y-0 right-3 flex items-center" style={{ color: 'var(--text-4)' }}
-                            aria-label="Toggle password visibility">{showRPw ? '🙈' : '👁'}</button>
+                            aria-label="Toggle password visibility"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
                         </div>
                       </Field>
                       <Field label={t.confirmPassword} error={errors.rPassC}>
@@ -252,11 +316,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Road + Car animation strip */}
-        <div className="login-road">
+        {/* Road + Car transition */}
+        <div className="login-road auth-road">
           <div className={`road-dashes ${animState !== 'idle' ? 'animating' : ''}`} />
         </div>
-        <div className="car-track" ref={carRef}>
+        <div className="car-track">
           <CarSVG
             className={`car-anim ${animState === 'right' ? 'drive-right' : animState === 'left' ? 'drive-left' : animState === 'exit' ? 'drive-exit' : ''}`}
           />

@@ -27,17 +27,17 @@ export function VisitCard({ visit, onClick, dimmed }: { visit: Visit; onClick: (
         </div>
       </div>
       <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-4)' }}>
-        <span>🚗 {visit.car.brand} {visit.car.model} · {visit.car.plate}</span>
-        <span>📅 {new Date(visit.scheduledAt).toLocaleDateString('en-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+        <span> {visit.car.brand} {visit.car.model} · {visit.car.plate}</span>
+        <span> {new Date(visit.scheduledAt).toLocaleDateString('en-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
         {visit.diagnosis.length > 0 && (
           <span style={{ color: visit.diagnosis.some(d => d.severity === 'critical') ? '#DC2626' : 'var(--text-4)' }}>
-            🔍 {visit.diagnosis.length} issue{visit.diagnosis.length > 1 ? 's' : ''}
+             {visit.diagnosis.length} issue{visit.diagnosis.length > 1 ? 's' : ''}
           </span>
         )}
       </div>
       {visit.customerNotes && (
         <div className="mt-2 text-xs p-2 rounded-lg" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>
-          💬 "{visit.customerNotes}"
+           "{visit.customerNotes}"
         </div>
       )}
     </button>

@@ -29,14 +29,14 @@ export const MOCK_MY_CARS = [
 
 // API: GET /api/v1/services/types
 export const SERVICE_TYPES = [
-  { id: 1, name: 'Oil Change',         nameAr: 'تغيير الزيت',         icon: '🛢️', price: 350,  durationMin: 45  },
-  { id: 2, name: 'Tire Rotation',      nameAr: 'تدوير الإطارات',      icon: '🔄', price: 200,  durationMin: 30  },
-  { id: 3, name: 'Brake Service',      nameAr: 'صيانة الفرامل',       icon: '🔧', price: 900,  durationMin: 120 },
-  { id: 4, name: 'AC Service',         nameAr: 'صيانة التكييف',       icon: '❄️', price: 600,  durationMin: 90  },
-  { id: 5, name: 'Full Inspection',    nameAr: 'فحص شامل',            icon: '🔍', price: 500,  durationMin: 60  },
-  { id: 6, name: 'Battery Check',      nameAr: 'فحص البطارية',        icon: '⚡', price: 150,  durationMin: 20  },
-  { id: 7, name: 'Wheel Alignment',    nameAr: 'ضبط الزوايا',         icon: '🎯', price: 300,  durationMin: 45  },
-  { id: 8, name: 'Engine Diagnostic',  nameAr: 'تشخيص المحرك',        icon: '💻', price: 400,  durationMin: 60  },
+  { id: 1, name: 'Oil Change',         nameAr: 'تغيير الزيت',         icon: '', price: 350,  durationMin: 45  },
+  { id: 2, name: 'Tire Rotation',      nameAr: 'تدوير الإطارات',      icon: '', price: 200,  durationMin: 30  },
+  { id: 3, name: 'Brake Service',      nameAr: 'صيانة الفرامل',       icon: '', price: 900,  durationMin: 120 },
+  { id: 4, name: 'AC Service',         nameAr: 'صيانة التكييف',       icon: '', price: 600,  durationMin: 90  },
+  { id: 5, name: 'Full Inspection',    nameAr: 'فحص شامل',            icon: '', price: 500,  durationMin: 60  },
+  { id: 6, name: 'Battery Check',      nameAr: 'فحص البطارية',        icon: '', price: 150,  durationMin: 20  },
+  { id: 7, name: 'Wheel Alignment',    nameAr: 'ضبط الزوايا',         icon: '', price: 300,  durationMin: 45  },
+  { id: 8, name: 'Engine Diagnostic',  nameAr: 'تشخيص المحرك',        icon: '', price: 400,  durationMin: 60  },
 ];
 
 // API: GET /api/v1/branches
@@ -81,12 +81,12 @@ export const MOCK_MY_RENTALS = [
 
 // API: GET /api/v1/sos/problem-types
 export const SOS_PROBLEM_TYPES = [
-  { id: 'breakdown',  label: 'Breakdown',   labelAr: 'عطل مفاجئ',    icon: '🔧', desc: 'Car won\'t start or stalled' },
-  { id: 'flat-tire',  label: 'Flat Tire',   labelAr: 'إطار مثقوب',   icon: '🚗', desc: 'Puncture or blowout'         },
-  { id: 'accident',   label: 'Accident',    labelAr: 'حادث',          icon: '💥', desc: 'Minor collision'              },
-  { id: 'fuel',       label: 'Out of Fuel', labelAr: 'نفاد الوقود',   icon: '⛽', desc: 'Need emergency fuel'          },
-  { id: 'locked-out', label: 'Locked Out',  labelAr: 'مفتاح داخل',   icon: '🔑', desc: 'Keys locked inside'           },
-  { id: 'towing',     label: 'Need Towing', labelAr: 'سحب السيارة',   icon: '🚛', desc: 'Car needs to be towed'        },
+  { id: 'breakdown',  label: 'Breakdown',   labelAr: 'عطل مفاجئ',    icon: '', desc: 'Car won\'t start or stalled' },
+  { id: 'flat-tire',  label: 'Flat Tire',   labelAr: 'إطار مثقوب',   icon: '', desc: 'Puncture or blowout'         },
+  { id: 'accident',   label: 'Accident',    labelAr: 'حادث',          icon: '', desc: 'Minor collision'              },
+  { id: 'fuel',       label: 'Out of Fuel', labelAr: 'نفاد الوقود',   icon: '', desc: 'Need emergency fuel'          },
+  { id: 'locked-out', label: 'Locked Out',  labelAr: 'مفتاح داخل',   icon: '', desc: 'Keys locked inside'           },
+  { id: 'towing',     label: 'Need Towing', labelAr: 'سحب السيارة',   icon: '', desc: 'Car needs to be towed'        },
 ];
 
 export type BookingStatus = 'pending' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';

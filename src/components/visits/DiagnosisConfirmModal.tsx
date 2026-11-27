@@ -31,7 +31,7 @@ export function DiagnosisConfirmModal({ visit, onClose }: { visit: Visit; onClos
   if (done) return (
     <Modal title="" onClose={onClose}>
       <div className="text-center py-6">
-        <div className="text-5xl mb-3">✅</div>
+        <div className="text-5xl mb-3"></div>
         <div className="font-bold text-lg mb-1" style={{ color: 'var(--text)' }}>Confirmed!</div>
         <div className="text-sm" style={{ color: 'var(--text-3)' }}>
           The mechanic will now fix {selected.length} item{selected.length > 1 ? 's' : ''}.

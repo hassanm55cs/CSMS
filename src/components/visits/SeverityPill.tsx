@@ -10,7 +10,7 @@ export function SeverityPill({ severity }: { severity: Severity }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
       style={{ background: s.bg, color: s.color }}>
-      {severity === 'critical' ? '🔴' : severity === 'warning' ? '🟡' : '🟢'} {s.label}
+      {severity === 'critical' ? '' : severity === 'warning' ? '' : ''} {s.label}
     </span>
   );
 }

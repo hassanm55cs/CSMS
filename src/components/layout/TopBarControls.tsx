@@ -1,4 +1,5 @@
 import { useTheme } from '../../context/ThemeContext';
+import { Icon } from '../ui/Icon';
 
 export function TopBarControls({ onLogout, onProfile, userName }: { onLogout: () => void; onProfile: () => void; userName: string }) {
   const { dark, toggleDark, lang, toggleLang } = useTheme();
@@ -7,8 +8,8 @@ export function TopBarControls({ onLogout, onProfile, userName }: { onLogout: ()
       <button onClick={toggleLang} className="btn btn-ghost btn-sm font-mono text-xs" style={{ color: 'var(--text-3)' }}>
         {lang === 'en' ? 'العربية' : 'EN'}
       </button>
-      <button onClick={toggleDark} className="btn btn-ghost btn-sm text-lg" aria-label="Toggle theme">
-        {dark ? '☀️' : '🌙'}
+      <button onClick={toggleDark} className="btn btn-ghost btn-sm" aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
+        <Icon name={dark ? 'sun' : 'moon'} size={18} />
       </button>
       <button onClick={onProfile} className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: 'var(--primary)' }} aria-label="Profile">
         {userName[0]}
