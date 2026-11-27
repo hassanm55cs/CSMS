@@ -233,7 +233,7 @@ public class CarService
             service.Visit.CarId == licencePlate &&
             service.Approved &&
             (service.Visit.Status == Status.serviceApproved ||
-             service.Visit.Status == Status.InProgress));
+             service.Visit.Status == Status.UnderDIagnosis|| service.Visit.Status == Status.InProgress));
 
         if (hasVisits || hasEmergencyRequests || hasActiveServices)
         {

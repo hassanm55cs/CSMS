@@ -1,5 +1,6 @@
 using CSMS.Data;
 using CSMS.Dto.NotificationDto;
+using CSMS.Enums;
 using CSMS.ViewModel;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,6 +39,7 @@ public class NotificationService
                 NotificationId = notification.NotificationId,
                 Message = notification.Message,
                 VisitId = notification.VisitId,
+                ConfirmationPending = notification.Visit.Status == Status.DiagnosesSentToCustomer,//we added it to make the fornt know if the client successfully confirmed the visit or not
                 IsRead = notification.IsRead,
                 CreatedAt = notification.CreatedAt
             })

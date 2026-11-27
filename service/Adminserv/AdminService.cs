@@ -1,4 +1,4 @@
-﻿using CSMS.Data;
+using CSMS.Data;
 using CSMS.Dto;
 using CSMS.Dto.Branch;
 using CSMS.Dto.Common;
@@ -47,6 +47,8 @@ namespace CSMS.service.Adminserv
             {
                 Fullname = d.FullName,
                 Email = d.Email,
+                PhoneNumber = d.PhoneNumber,
+                Salary = d.Salary,
                 BranchId = d.BranchId,
                 DriverId = d.DriverId
             }).ToListAsync();

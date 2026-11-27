@@ -12,7 +12,7 @@ public class DriverViewModel
 
     public DateOnly StartWorkDate { get; set; }
 
-    public double Salary { get; set; }
+    public double ?Salary { get; set; }
 
     public bool IsAvailable { get; set; }
 

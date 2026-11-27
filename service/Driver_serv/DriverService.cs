@@ -181,6 +181,85 @@ public class DriverService:IDriverService
             });
     }
 
+    public async Task<DriverAdminUpdateResult> UpdateAdminFieldsAsync(int driverId, UpdateDriverAdminDto dto)
+    {
+        var driver = await _context.Drivers.SingleOrDefaultAsync(item => item.DriverId == driverId);
+        if (driver is null)
+        {
+            return new DriverAdminUpdateResult(DriverAdminUpdateStatus.NotFound, null, Array.Empty<string>());
+        }
+
+        var email = dto.Email.Trim();
+        var phone = dto.PhoneNumber.Trim();
+        if (await _context.Drivers.AnyAsync(item => item.DriverId != driverId && item.Email == email))
+        {
+            return new DriverAdminUpdateResult(DriverAdminUpdateStatus.EmailAlreadyUsed, null, Array.Empty<string>());
+        }
+        if (await _context.Drivers.AnyAsync(item => item.DriverId != driverId && item.PhoneNumber == phone))
+        {
+            return new DriverAdminUpdateResult(DriverAdminUpdateStatus.PhoneAlreadyUsed, null, Array.Empty<string>());
+        }
+
+        ApplicationUser? user = null;
+        var oldEmail = driver.Email;
+        var oldPhone = driver.PhoneNumber;
+        var oldUserName = string.Empty;
+        if (driver.UserId is not null)
+        {
+            user = await _userManager.FindByIdAsync(driver.UserId);
+            if (user is not null)
+            {
+                var emailOwner = await _userManager.FindByEmailAsync(email);
+                if (emailOwner is not null && emailOwner.Id != user.Id)
+                {
+                    return new DriverAdminUpdateResult(DriverAdminUpdateStatus.EmailAlreadyUsed, null, Array.Empty<string>());
+                }
+
+                oldUserName = user.UserName ?? oldEmail;
+                var emailResult = await _userManager.SetEmailAsync(user, email);
+                if (!emailResult.Succeeded)
+                {
+                    return new DriverAdminUpdateResult(DriverAdminUpdateStatus.IdentityFailed, null,
+                        emailResult.Errors.Select(error => error.Description).ToArray());
+                }
+                var userNameResult = await _userManager.SetUserNameAsync(user, email);
+                if (!userNameResult.Succeeded)
+                {
+                    await _userManager.SetEmailAsync(user, oldEmail);
+                    return new DriverAdminUpdateResult(DriverAdminUpdateStatus.IdentityFailed, null,
+                        userNameResult.Errors.Select(error => error.Description).ToArray());
+                }
+                var phoneResult = await _userManager.SetPhoneNumberAsync(user, phone);
+                if (!phoneResult.Succeeded)
+                {
+                    await _userManager.SetUserNameAsync(user, oldUserName);
+                    await _userManager.SetEmailAsync(user, oldEmail);
+                    return new DriverAdminUpdateResult(DriverAdminUpdateStatus.IdentityFailed, null,
+                        phoneResult.Errors.Select(error => error.Description).ToArray());
+                }
+            }
+        }
+
+        driver.Email = email;
+        driver.PhoneNumber = phone;
+        driver.Salary = dto.Salary;
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            if (user is not null)
+            {
+                await _userManager.SetPhoneNumberAsync(user, oldPhone);
+                await _userManager.SetUserNameAsync(user, oldUserName);
+                await _userManager.SetEmailAsync(user, oldEmail);
+            }
+            return new DriverAdminUpdateResult(DriverAdminUpdateStatus.PhoneAlreadyUsed, null, Array.Empty<string>());
+        }
+
+        return new DriverAdminUpdateResult(DriverAdminUpdateStatus.Updated, ToViewModel(driver), Array.Empty<string>());
+    }
     // The driver is looked up by email; the phone is updated on the driver profile and on the login.
     public async Task<DriverPhoneResult> UpdatePhoneByEmailAsync(UpdateDriverPhoneDto dto)
     {
@@ -295,3 +374,14 @@ public enum DriverPhoneStatus
 }
 
 public record DriverPhoneResult(DriverPhoneStatus Status, DriverViewModel? Driver, string[] Errors);
+
+public enum DriverAdminUpdateStatus
+{
+    Updated,
+    NotFound,
+    EmailAlreadyUsed,
+    PhoneAlreadyUsed,
+    IdentityFailed
+}
+
+public record DriverAdminUpdateResult(DriverAdminUpdateStatus Status, DriverViewModel? Driver, string[] Errors);

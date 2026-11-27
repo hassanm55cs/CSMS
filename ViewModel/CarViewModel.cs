@@ -22,7 +22,7 @@ public class CarViewModel
 
     public int CustomerId { get; set; }
 
-    public double PriceInEgp { get; set; }
+    public double ?PriceInEgp { get; set; }
 
     public int CurrentKm { get; set; }
 }

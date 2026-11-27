@@ -22,7 +22,8 @@ namespace CSMS.service.Products
             int page, int pageSize,
             string? search,
             int? branchId,
-            bool availableOnly)
+            bool availableOnly,
+            string? stockStatus = null)
         {
             var query = _context.Products
                 .Include(p => p.BranchProducts)
@@ -39,11 +40,20 @@ namespace CSMS.service.Products
                     (p.Description != null && p.Description.ToLower().Contains(lower)));
             }
 
-            // Branch filter — product must have a BranchProduct entry for this branch
-            if (branchId.HasValue)
+            // Employee availability filters are evaluated against their own branch,
+            // including products that have no inventory row there (out of stock).
+            if (branchId.HasValue && string.Equals(stockStatus, "available", StringComparison.OrdinalIgnoreCase))
             {
-                query = query.Where(p =>
-                    p.BranchProducts.Any(bp => bp.BranchId == branchId.Value));
+                query = query.Where(p => p.BranchProducts.Any(bp => bp.BranchId == branchId.Value && bp.Quantity > 0));
+            }
+            else if (branchId.HasValue && string.Equals(stockStatus, "outOfStock", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(p => !p.BranchProducts.Any(bp => bp.BranchId == branchId.Value && bp.Quantity > 0));
+            }
+            // Existing branch filter — product must have a BranchProduct entry for that branch.
+            else if (branchId.HasValue)
+            {
+                query = query.Where(p => p.BranchProducts.Any(bp => bp.BranchId == branchId.Value));
             }
 
             // Available-only filter — at least one branch must have quantity > 0

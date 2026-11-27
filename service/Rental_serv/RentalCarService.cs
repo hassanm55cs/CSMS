@@ -162,10 +162,7 @@ public class RentalCarService: IRentalCarService
             return new RentalCarCreateResult(RentalCarCreateStatus.InvalidEnum, null);
         }
 
- 
-        {
-            return new RentalCarCreateResult(RentalCarCreateStatus.BranchNotFound, null);
-        }
+
 
         var licencePlate = dto.LicencePlate.Trim();
         if (await _context.CarsForRents.AnyAsync(item => item.LicencePlate == licencePlate))

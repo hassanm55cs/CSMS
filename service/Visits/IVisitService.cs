@@ -12,7 +12,7 @@ namespace CSMS.service.Visits
         // ── Bookings ──────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Creates a new booking (Visit with Status=Entered and one Service record).
+        /// Creates a new booking (Visit with Status=Entered and Service records for the chosen products).
         /// Returns the booking response on success; throws <see cref="InvalidOperationException"/>
         /// for business-rule violations.
         /// </summary>

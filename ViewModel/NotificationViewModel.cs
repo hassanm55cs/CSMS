@@ -8,6 +8,8 @@ public class NotificationViewModel
 
     public int VisitId { get; set; }
 
+    public bool ConfirmationPending { get; set; }
+
     public bool IsRead { get; set; }
 
     public DateTime CreatedAt { get; set; }

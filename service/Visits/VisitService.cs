@@ -42,16 +42,24 @@ namespace CSMS.service.Visits
             if (car is null)
                 throw new InvalidOperationException($"Car with licence plate '{dto.CarLicencePlate}' was not found.");
 
-            // 2. Product must exist and be stocked at the branch
-            var branchProduct = await _context.BranchProducts
+            // 2. Every requested product must be available from the selected branch.
+            List<int> productIds = dto.ServiceProductIds is { Count: > 0 }
+                ? dto.ServiceProductIds
+                : dto.ServiceProductId.HasValue ? [dto.ServiceProductId.Value] : [];
+            if (productIds.Count == 0 || productIds.Any(id => id <= 0))
+                throw new InvalidOperationException("Select at least one valid service product.");
+            if (productIds.Distinct().Count() != productIds.Count)
+                throw new InvalidOperationException("Duplicate service products are not allowed.");
+
+            var availableProductIds = await _context.BranchProducts
                 .AsNoTracking()
-                .FirstOrDefaultAsync(bp =>
-                    bp.BranchId == dto.BranchId &&
-                    bp.ProductId == dto.ServiceProductId &&
-                    bp.Quantity > 0);
-            if (branchProduct is null)
+                .Where(bp => bp.BranchId == dto.BranchId && productIds.Contains(bp.ProductId) && bp.Quantity > 0)
+                .Select(bp => bp.ProductId)
+                .ToListAsync();
+            var unavailableProductIds = productIds.Except(availableProductIds).ToList();
+            if (unavailableProductIds.Count > 0)
                 throw new InvalidOperationException(
-                    $"Product {dto.ServiceProductId} is not available at branch {dto.BranchId} or is out of stock.");
+                    $"Product(s) {string.Join(", ", unavailableProductIds)} are not available at branch {dto.BranchId} or are out of stock.");
 
             // 3. Service date must not be in the past
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -61,7 +69,7 @@ namespace CSMS.service.Visits
             // 4. No existing open visit for the same car on the same date
             var conflictExists = await _context.Visits.AnyAsync(v =>
                 v.CarId == dto.CarLicencePlate &&
-                v.ServiceDate == dto.ServiceDate &&
+                //v.ServiceDate == dto.ServiceDate &&
                 v.Status != Status.Completed);
             if (conflictExists)
                 throw new InvalidOperationException(
@@ -79,17 +87,17 @@ namespace CSMS.service.Visits
             _context.Visits.Add(visit);
             await _context.SaveChangesAsync();  // get VisitId
 
-            // Create initial Service record
-            var service = new Service
+            // Create one initial Service record for each product chosen by the customer.
+            var services = productIds.Select(productId => new Service
             {
                 VisitId       = visit.VisitId,
-                ProductId     = dto.ServiceProductId,
+                ProductId     = productId,
                 ServiceDate   = DateTime.UtcNow,
                 StatusService = StatusService.normal,
                 Description   = dto.CustomerNotes ?? string.Empty,
                 Approved      = true,
-            };
-            _context.Services.Add(service);
+            }).ToList();
+            _context.Services.AddRange(services);
             await _context.SaveChangesAsync();
 
             return new BookingResponseDto
@@ -233,7 +241,10 @@ namespace CSMS.service.Visits
             if (emp is null) return null;
 
             if (!string.IsNullOrWhiteSpace(employeeUserId))
-                query = query.Where(v=>emp.BranchId==v.BranchId&&v.EmployeeId==null||v.EmployeeId==emp.EmployeeId&&v.Status==Status.CustomerConfirmed);
+                query = query.Where(v =>
+                    (v.BranchId == emp.BranchId && v.EmployeeId == null &&
+                     v.Status != Status.Completed && v.Status != Status.Cancelled) ||
+                    v.EmployeeId == emp.EmployeeId);
 
             if (!string.IsNullOrWhiteSpace(status))
             {
@@ -334,6 +345,36 @@ namespace CSMS.service.Visits
 
             if (visit is null) return null;
 
+            var diagnosisProductIds = dto.Items
+                .Where(item => item.ProductId.HasValue && item.ProductId.Value > 0)
+                .Select(item => item.ProductId!.Value)
+                .Distinct()
+                .ToList();
+            var customerSelectedProductIds = await _context.Services
+                .AsNoTracking()
+                .Where(service => service.VisitId == visitId && service.Approved)
+                .Select(service => service.ProductId)
+                .Distinct()
+                .ToListAsync();
+            var duplicateProductIds = diagnosisProductIds.Intersect(customerSelectedProductIds).ToList();
+            if (duplicateProductIds.Count > 0)
+                throw new InvalidOperationException(
+                    $"Product(s) {string.Join(", ", duplicateProductIds)} were already selected by the customer for this booking.");
+
+            if (diagnosisProductIds.Count > 0)
+            {
+                var availableProductIds = await _context.BranchProducts
+                    .AsNoTracking()
+                    .Where(branchProduct => branchProduct.BranchId == visit.BranchId &&
+                        diagnosisProductIds.Contains(branchProduct.ProductId) && branchProduct.Quantity > 0)
+                    .Select(branchProduct => branchProduct.ProductId)
+                    .ToListAsync();
+                var unavailableProductIds = diagnosisProductIds.Except(availableProductIds).ToList();
+                if (unavailableProductIds.Count > 0)
+                    throw new InvalidOperationException(
+                        $"Product(s) {string.Join(", ", unavailableProductIds)} are not available at this visit's branch or are out of stock.");
+            }
+
             visit.Status = Status.DiagnosesSentToCustomer;
 
             var createdServices = new List<Service>();
@@ -403,7 +444,7 @@ namespace CSMS.service.Visits
             if (!selectedIds.All(id => serviceIds.Contains(id)))
                 throw new Exception("Invalid service IDs for this visit.");
 
-
+            
 
             foreach (var svc in visit.Services)
             {
@@ -415,7 +456,7 @@ namespace CSMS.service.Visits
 
             // Move out of the confirmation state after the customer submits, even if all items are rejected.
             bool anyApproved = visit.Services.Any(s => dto.ApprovedServiceIds.Contains(s.ServiceId));
-            visit.Status = anyApproved ? Status.serviceApproved : Status.serviceRejected;
+            visit.Status = anyApproved ? Status.InProgress : Status.serviceRejected;
 
             await _context.SaveChangesAsync();
 
@@ -483,8 +524,13 @@ namespace CSMS.service.Visits
                 if (firstSvc is not null)
                     firstSvc.Description = $"[COMPLETED] {dto.CompletionNotes} | {firstSvc.Description}";
             }
+            var request = _context.EmergencyRequests.FirstOrDefault(i => i.CarLicencePlate == visit.Car.LicencesPlate);
+            if(request!=null)
+            {
+                request.StatusEmergency = StatusEmergency.completed;
+            }
 
-            visit.Status = Status.Completed ;
+            visit.Status = Status.Completed ;//if there is a emegency request for that car and this car is finoshed change the status of the emegency request 
             await _context.SaveChangesAsync();
 
             return new CompletionResponseDto

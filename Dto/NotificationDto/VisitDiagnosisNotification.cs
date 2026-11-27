@@ -4,4 +4,5 @@ public sealed record VisitDiagnosisNotification(
     int NotificationId,
     int VisitId,
     string Message,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool ConfirmationPending = true);

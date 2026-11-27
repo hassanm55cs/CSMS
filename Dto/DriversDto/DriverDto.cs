@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace CSMS.Dto.DriversDto
 {
@@ -11,7 +11,6 @@ namespace CSMS.Dto.DriversDto
         public string FullName { get; set; }
 
         public int BranchId { get; set; }
-        public double Salary { get; set; }
         public DateOnly StartWorkDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
         public string Password { get; set; }
         public string ConfirmPassword { get; set; }

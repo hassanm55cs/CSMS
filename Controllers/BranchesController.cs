@@ -8,7 +8,7 @@ namespace CSMS.Controllers
 {
     [ApiController]
     [Route("/branches")]
-    [Authorize(Roles ="admin")]
+    [Authorize]
     public class BranchesController : ControllerBase
     {
         private readonly IBranchService _branchService;
@@ -22,6 +22,7 @@ namespace CSMS.Controllers
         // GET /api/v1/branches
         // ══════════════════════════════════════════════════════════════
         [HttpGet]
+        [Authorize(Roles = "admin,customer")]
         public async Task<IActionResult> GetAll(
             [FromQuery] int page          = 1,
             [FromQuery] int pageSize      = 10,
@@ -40,6 +41,7 @@ namespace CSMS.Controllers
         // GET /api/v1/branches/{branchId}
         // ══════════════════════════════════════════════════════════════
         [HttpGet("{branchId:int}")]
+        [Authorize(Roles = "admin,customer")]
         public async Task<IActionResult> GetById(int branchId)
         {
             var branch = await _branchService.GetByIdAsync(branchId);
@@ -49,10 +51,22 @@ namespace CSMS.Controllers
             return Ok(branch);
         }
 
+        [HttpGet("{branchId:int}/products")]
+        [Authorize(Roles = "admin,customer,employee")]
+        public async Task<IActionResult> GetProducts(int branchId)
+        {
+            var branch = await _branchService.GetByIdAsync(branchId);
+            if (branch is null)
+                return NotFound(new { message = $"Branch with id {branchId} was not found." });
+
+            return Ok(branch.Products);
+        }
+
         // ══════════════════════════════════════════════════════════════
         // POST /api/v1/branches
         // ══════════════════════════════════════════════════════════════
         [HttpPost]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Create([FromBody] BranchRequestDto dto)
         {
             if (!ModelState.IsValid)
@@ -84,6 +98,7 @@ namespace CSMS.Controllers
         // PUT /api/v1/branches/{branchId}
         // ══════════════════════════════════════════════════════════════
         [HttpPut("{branchId:int}")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Update(int branchId, [FromBody] BranchRequestDto dto)
         {
             if (!ModelState.IsValid)
@@ -115,6 +130,7 @@ namespace CSMS.Controllers
         // DELETE /api/v1/branches/{branchId}
         // ══════════════════════════════════════════════════════════════
         [HttpDelete("{branchId:int}")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Delete(int branchId)
         {
             try

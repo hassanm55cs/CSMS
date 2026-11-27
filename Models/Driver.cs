@@ -15,7 +15,7 @@ public partial class Driver
 
     public DateOnly StartWorkDate { get; set; }
 
-    public double Salary { get; set; }
+    public double ?Salary { get; set; }
 
     public bool ?IsAvailable { get; set; }
 

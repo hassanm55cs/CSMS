@@ -1,4 +1,4 @@
-﻿using CSMS.Data;
+using CSMS.Data;
 using CSMS.Dto.AuthDto;
 using CSMS.Dto.DriversDto;
 using CSMS.Dto.EmployeeDto;
@@ -153,7 +153,7 @@ namespace CSMS.service.Register
                 Email = driverdto.Email,
                 PhoneNumber = driverdto.PhoneNumber,
                 BranchId = driverdto.BranchId,
-                Salary = driverdto.Salary,
+                Salary = 0,
                 StartWorkDate = driverdto.StartWorkDate,
                 UserId = user.Id,
                 IsVerified = false,

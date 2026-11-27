@@ -1,4 +1,4 @@
-﻿using CSMS.Dto.AuthDto;
+using CSMS.Dto.AuthDto;
 using CSMS.Dto.DriversDto;
 using CSMS.service.ChangePassword;
 using CSMS.service.Driver_serv;
@@ -52,6 +52,26 @@ namespace CSMS.Controllers
                     Errors = result.Errors
                 });
             }
+        }
+        [HttpPut("{driverId:int}")]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> UpdateDriverAdminFields(int driverId, [FromBody] UpdateDriverAdminDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var result = await _idriverService.UpdateAdminFieldsAsync(driverId, dto);
+            return result.Status switch
+            {
+                DriverAdminUpdateStatus.Updated => Ok(result.Driver),
+                DriverAdminUpdateStatus.NotFound => NotFound(new { Message = "Driver not found." }),
+                DriverAdminUpdateStatus.EmailAlreadyUsed => Conflict(new { Message = "Email is already in use." }),
+                DriverAdminUpdateStatus.PhoneAlreadyUsed => Conflict(new { Message = "Phone number is already in use." }),
+                DriverAdminUpdateStatus.IdentityFailed => BadRequest(new { Errors = result.Errors }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError)
+            };
         }
         [HttpPut("phone")]
         [Authorize(Roles = "admin")]

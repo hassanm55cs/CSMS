@@ -17,7 +17,8 @@ namespace CSMS.service.Products
             int page, int pageSize,
             string? search,
             int? branchId,
-            bool availableOnly);
+            bool availableOnly,
+            string? stockStatus = null);
 
         /// <summary>Returns full product detail with all branch stock, or null if not found.</summary>
         Task<ProductDetailDto?> GetByIdAsync(int productId);

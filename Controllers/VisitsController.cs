@@ -146,6 +146,10 @@ namespace CSMS.Controllers
 
                 return Ok(result);
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
             catch (DbUpdateException ex)
             {
                 var inner = ex.InnerException?.Message ?? ex.Message;
