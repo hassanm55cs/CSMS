@@ -37,6 +37,6 @@ public partial class EmergencyRequest
     public DateTime? CancelledAt { get; set; }
 
     public string? CancellationReason { get; set; }
-    public byte[] RowVersion { get; set; } = null!;
+    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
 }

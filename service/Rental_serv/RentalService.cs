@@ -37,15 +37,10 @@ public class RentalService:IRentalService
 
         var customer = await _context.Customers
             .AsNoTracking()
-            .Include(x => x.RentedCarCustomers)
             .SingleOrDefaultAsync(item => item.UserId == userId);
         if (customer is null)
         {
             return new RentalCreateResult(RentalCreateStatus.CustomerNotFound, null);
-        }
-        if(customer.RentedCarCustomers.Any(i => i.Status == RentedCarCustomerStatus.Active))
-        {
-            return new RentalCreateResult(RentalCreateStatus.CustomerHasaRentedCar, null);
         }
 
         var licencePlate = dto.LicencePlate.Trim();
@@ -68,38 +63,59 @@ public class RentalService:IRentalService
             return new RentalCreateResult(RentalCreateStatus.CarNotPriced, null);
         }
 
-        // Serializable so two customers cannot book the same dates at the same time.
-        await using var transaction =
-            await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+        // Serializable so two customers cannot book overlapping dates or double-rent concurrently.
+        await using var transaction = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+            : null;
 
-        var overlaps = await _context.RentedCarCustomers.AnyAsync(rental =>
-            rental.LicencsePlateRented == car.LicencePlate &&
-            !rental.IsCancelled &&
-            rental.RentStartDate <= end &&
-            rental.RentEndDate >= start);
-        if (overlaps)
+        RentedCarCustomer rental;
+        try
+        {
+            var customerHasActiveRental = await _context.RentedCarCustomers.AnyAsync(rental =>
+                rental.CustomerId == customer.CustomerId &&
+                !rental.IsCancelled &&
+                rental.RentEndDate >= today);
+            if (customerHasActiveRental)
+            {
+                return new RentalCreateResult(RentalCreateStatus.CustomerHasaRentedCar, null);
+            }
+
+            var overlaps = await _context.RentedCarCustomers.AnyAsync(rental =>
+                rental.LicencsePlateRented == car.LicencePlate &&
+                !rental.IsCancelled &&
+                rental.RentStartDate <= end &&
+                rental.RentEndDate >= start);
+            if (overlaps)
+            {
+                return new RentalCreateResult(RentalCreateStatus.Overlap, null);
+            }
+
+            // Both the start and end day are counted (same-day rental = 1 day).
+            var days = end.DayNumber - start.DayNumber + 1;
+
+            rental = new RentedCarCustomer
+            {
+                CustomerId = customer.CustomerId,
+                LicencsePlateRented = car.LicencePlate,
+                RentStartDate = start,
+                RentEndDate = end,
+                NoOfDaysForRent = days,
+                PriceForRent = Math.Round(days * car.PricePerDay, 2),
+                Status = RentedCarCustomerStatus.Active,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.RentedCarCustomers.Add(rental);
+            await _context.SaveChangesAsync();
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+        }
+        catch (Exception ex) when (ConcurrencyExceptionHelper.IsConcurrencyOrDeadlock(ex))
         {
             return new RentalCreateResult(RentalCreateStatus.Overlap, null);
         }
-
-        // Both the start and end day are counted (same-day rental = 1 day).
-        var days = end.DayNumber - start.DayNumber + 1;
-        car.Status = RentalCarStatus.Rented;
-
-        var rental = new RentedCarCustomer
-        {
-            CustomerId = customer.CustomerId,
-            LicencsePlateRented = car.LicencePlate,
-            RentStartDate = start,
-            RentEndDate = end,
-            NoOfDaysForRent = days,
-            PriceForRent = Math.Round(days * car.PricePerDay, 2),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.RentedCarCustomers.Add(rental);
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
 
         return new RentalCreateResult(RentalCreateStatus.Created, ToViewModel(rental, car, today));
     }
@@ -221,13 +237,21 @@ public class RentalService:IRentalService
         };
     }
 
-    public async Task<RentalCancelResult> CancelRentalAsync(string userId,bool isAdmin, string? reason)
+    public async Task<RentalCancelResult> CancelRentalAsync(string userId, bool isAdmin, string? reason)
     {
-        var rental = await _context.RentedCarCustomers
+        var query = _context.RentedCarCustomers
             .Include(item => item.LicencsePlateRentedNavigation)
-            .SingleOrDefaultAsync(item =>
-                item.Customer.UserId == userId &&
-                (isAdmin || item.Customer.UserId == userId));
+            .Where(item => !item.IsCancelled);
+
+        if (!isAdmin)
+        {
+            query = query.Where(item => item.Customer.UserId == userId);
+        }
+
+        var rental = await query
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.RentedCarCustomerId)
+            .FirstOrDefaultAsync();
         if (rental is null)
         {
             return new RentalCancelResult(RentalCancelStatus.NotFound, null);
@@ -252,6 +276,7 @@ public class RentalService:IRentalService
         }
 
         rental.IsCancelled = true;
+        rental.Status = RentedCarCustomerStatus.Completed;
         rental.CancelledAt = DateTime.UtcNow;
         rental.CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         rental.LicencsePlateRentedNavigation.Status = RentalCarStatus.Available;

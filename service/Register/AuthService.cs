@@ -202,13 +202,13 @@ namespace CSMS.service.Register
                     null, null, null);
             }
 
-            // Customer has unique email and phone constraints too.
-            if (await _context.Drivers.AnyAsync(c =>
-                c.Email == dto.Email || c.PhoneNumber == dto.PhoneNumber))
+            // Employee has unique email and phone constraints too.
+            if (await _context.Employees.AnyAsync(e =>
+                e.Email == dto.Email || e.PhoneNumber == dto.PhoneNumber))
             {
                 return (false, new[]
                 {
-                "A customer with this email or phone already exists."
+                "An employee with this email or phone already exists."
             }, null, null, null);
             }
             var branchid = await _context.ServiceBranches.FindAsync(dto.BranchId);

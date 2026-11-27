@@ -1,3 +1,4 @@
+using System.Data;
 using CSMS.Data;
 using CSMS.Dto;
 using CSMS.Enums;
@@ -57,33 +58,51 @@ public class EmergencyService:IEmergencyService
             return new EmergencyResult(EmergencyResultStatus.CarNotFound);
         }
 
-        var activeStatuses = EmergencyStatusHelper.ActiveStatuses;
-        var hasActiveRequest = await _context.EmergencyRequests.AnyAsync(request =>
-            request.CarLicencePlate == licencePlate &&
-            activeStatuses.Contains(request.StatusEmergency));
-        if (hasActiveRequest)
+        await using var transaction = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+            : null;
+
+        EmergencyRequest emergencyRequest;
+        int? nearestBranchId;
+        try
+        {
+            var activeStatuses = EmergencyStatusHelper.ActiveStatuses;
+            var hasActiveRequest = await _context.EmergencyRequests.AnyAsync(request =>
+                request.CarLicencePlate == licencePlate &&
+                activeStatuses.Contains(request.StatusEmergency));
+            if (hasActiveRequest)
+            {
+                return new EmergencyResult(EmergencyResultStatus.DuplicateActiveRequest);
+            }
+
+            nearestBranchId = await FindNearestBranchIdAsync(latitude, longitude);
+
+            var now = DateTime.UtcNow;
+            emergencyRequest = new EmergencyRequest
+            {
+                CarLicencePlate = licencePlate,
+                BranchId = nearestBranchId,
+                ProblemType = problemType,
+                Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+                Latitude = GeoHelper.Format(latitude),
+                Longitude = GeoHelper.Format(longitude),
+                StatusEmergency = StatusEmergency.requested,
+                EmergenctTime = now,
+                UpdatedAt = now
+            };
+
+            _context.EmergencyRequests.Add(emergencyRequest);
+            await _context.SaveChangesAsync();
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+        }
+        catch (Exception ex) when (ConcurrencyExceptionHelper.IsConcurrencyOrDeadlock(ex))
         {
             return new EmergencyResult(EmergencyResultStatus.DuplicateActiveRequest);
         }
-
-        var nearestBranchId = await FindNearestBranchIdAsync(latitude, longitude);
-
-        var now = DateTime.UtcNow;
-        var emergencyRequest = new EmergencyRequest
-        {
-            CarLicencePlate = licencePlate,
-            BranchId = nearestBranchId,
-            ProblemType = problemType,
-            Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
-            Latitude = GeoHelper.Format(latitude),
-            Longitude = GeoHelper.Format(longitude),
-            StatusEmergency = StatusEmergency.requested,
-            EmergenctTime = now,
-            UpdatedAt = now
-        };
-
-        _context.EmergencyRequests.Add(emergencyRequest);
-        await _context.SaveChangesAsync();
 
         var result = await LoadResultAsync(emergencyRequest.EmergencyRequestId);
         if (result.Request is not null)
@@ -477,79 +496,94 @@ public class EmergencyService:IEmergencyService
         string userId,
         string? truckLicencePlate)
     {
-        var driver = await _context.Drivers
-            .SingleOrDefaultAsync(item => item.UserId == userId);
-        if (driver is null)
-        {
-            return new EmergencyResult(EmergencyResultStatus.DriverNotFound);
-        }
+        await using var transaction = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+            : null;
 
-        var request = await _context.EmergencyRequests
-            .SingleOrDefaultAsync(item => item.EmergencyRequestId == emergencyRequestId);
-        if (request is null)
+        Driver? driver;
+        EmergencyRequest? request;
+        try
         {
-            return new EmergencyResult(EmergencyResultStatus.NotFound);
-        }
-
-        if (request.StatusEmergency != StatusEmergency.requested || request.DriverId is not null)
-        {
-            return new EmergencyResult(EmergencyResultStatus.NotAssignable);
-        }
-
-        if (request.BranchId.HasValue && request.BranchId.Value != driver.BranchId)
-        {
-            return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
-        }
-
-        if (driver.IsAvailable != true ||
-            await HasActiveRequestAsync(driver.DriverId, emergencyRequestId))
-        {
-            return new EmergencyResult(EmergencyResultStatus.DriverUnavailable);
-        }
-
-        EmergencyTruck? truck = null;
-        if (!string.IsNullOrWhiteSpace(truckLicencePlate))
-        {
-            var truckPlate = truckLicencePlate.Trim();
-            truck = await _context.EmergencyTrucks
-                .SingleOrDefaultAsync(item => item.LicencePlate == truckPlate);
-            if (truck is null)
+            driver = await _context.Drivers
+                .SingleOrDefaultAsync(item => item.UserId == userId);
+            if (driver is null)
             {
-                return new EmergencyResult(EmergencyResultStatus.TruckNotFound);
+                return new EmergencyResult(EmergencyResultStatus.DriverNotFound);
             }
 
-            if (!truck.IsAvailable)
+            request = await _context.EmergencyRequests
+                .SingleOrDefaultAsync(item => item.EmergencyRequestId == emergencyRequestId);
+            if (request is null)
             {
-                return new EmergencyResult(EmergencyResultStatus.TruckUnavailable);
+                return new EmergencyResult(EmergencyResultStatus.NotFound);
             }
 
-            if (truck.BranchId != driver.BranchId)
+            if (request.StatusEmergency != StatusEmergency.requested || request.DriverId is not null)
+            {
+                return new EmergencyResult(EmergencyResultStatus.NotAssignable);
+            }
+
+            if (request.BranchId.HasValue && request.BranchId.Value != driver.BranchId)
             {
                 return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
             }
-        }
-        else
-        {
-            truck = await _context.EmergencyTrucks
-                .Where(item => item.BranchId == driver.BranchId && item.IsAvailable)
-                .OrderByDescending(item => item.DriverId == driver.DriverId)
-                .ThenBy(item => item.LicencePlate)
-                .FirstOrDefaultAsync();
-        }
 
-        request.DriverId = driver.DriverId;
-        request.BranchId ??= driver.BranchId;
-        request.TruckLicencePlate = truck?.LicencePlate;
-        request.StatusEmergency = StatusEmergency.assigned;
-        request.UpdatedAt = DateTime.UtcNow;
-        driver.IsAvailable = false;
-        if (truck is not null)
-        {
-            truck.IsAvailable = false;
-        }
+            if (driver.IsAvailable != true ||
+                await HasActiveRequestAsync(driver.DriverId, emergencyRequestId))
+            {
+                return new EmergencyResult(EmergencyResultStatus.DriverUnavailable);
+            }
 
-        // RowVersion makes sure only one driver wins if two accept at the same time.
-        if (!await TrySaveAsync())
+            EmergencyTruck? truck = null;
+            if (!string.IsNullOrWhiteSpace(truckLicencePlate))
+            {
+                var truckPlate = truckLicencePlate.Trim();
+                truck = await _context.EmergencyTrucks
+                    .SingleOrDefaultAsync(item => item.LicencePlate == truckPlate);
+                if (truck is null)
+                {
+                    return new EmergencyResult(EmergencyResultStatus.TruckNotFound);
+                }
+
+                if (!truck.IsAvailable)
+                {
+                    return new EmergencyResult(EmergencyResultStatus.TruckUnavailable);
+                }
+
+                if (truck.BranchId != driver.BranchId)
+                {
+                    return new EmergencyResult(EmergencyResultStatus.BranchMismatch);
+                }
+            }
+            else
+            {
+                truck = await _context.EmergencyTrucks
+                    .Where(item => item.BranchId == driver.BranchId && item.IsAvailable)
+                    .OrderByDescending(item => item.DriverId == driver.DriverId)
+                    .ThenBy(item => item.LicencePlate)
+                    .FirstOrDefaultAsync();
+            }
+
+            request.DriverId = driver.DriverId;
+            request.BranchId ??= driver.BranchId;
+            request.TruckLicencePlate = truck?.LicencePlate;
+            request.StatusEmergency = StatusEmergency.assigned;
+            request.UpdatedAt = DateTime.UtcNow;
+            driver.IsAvailable = false;
+            if (truck is not null)
+            {
+                truck.IsAvailable = false;
+            }
+
+            // RowVersion + Serializable transaction guarantee only one driver wins if two accept concurrently.
+            await _context.SaveChangesAsync();
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+        }
+        catch (Exception ex) when (ConcurrencyExceptionHelper.IsConcurrencyOrDeadlock(ex))
         {
             return new EmergencyResult(EmergencyResultStatus.Conflict);
         }
@@ -683,7 +717,7 @@ public class EmergencyService:IEmergencyService
             await _context.SaveChangesAsync();
             return true;
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception ex) when (ConcurrencyExceptionHelper.IsConcurrencyOrDeadlock(ex))
         {
             return false;
         }

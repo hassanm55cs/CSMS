@@ -1,8 +1,10 @@
+using System.Data;
 using CSMS.Data;
 using CSMS.Dto.Common;
 using CSMS.Dto.NotificationDto;
 using CSMS.Dto.Visit;
 using CSMS.Enums;
+using CSMS.Helper;
 using CSMS.Helpers;
 using CSMS.Hubs;
 using CSMS.Models;
@@ -51,21 +53,16 @@ namespace CSMS.service.Visits
             if (productIds.Distinct().Count() != productIds.Count)
                 throw new InvalidOperationException("Duplicate service products are not allowed.");
 
-            var branchProducts = await _context.BranchProducts
-                .Where(bp => bp.BranchId == dto.BranchId && productIds.Contains(bp.ProductId) && bp.Quantity > 0)
-                .ToListAsync();
-            var availableProductIds = branchProducts.Select(bp => bp.ProductId).ToList();
-            var unavailableProductIds = productIds.Except(availableProductIds).ToList();
-            if (unavailableProductIds.Count > 0)
-                throw new InvalidOperationException(
-                    $"Product(s) {string.Join(", ", unavailableProductIds)} are not available at branch {dto.BranchId} or are out of stock.");
-
             // 3. Service date must not be in the past
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             if (dto.ServiceDate < today)
                 throw new InvalidOperationException("Service date must not be in the past.");
 
-            // 4. No existing open visit for the same car
+            await using var transaction = _context.Database.IsRelational()
+                ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                : null;
+
+            // 4. No existing open visit for the same car (checked inside Serializable tx to prevent race duplicates)
             var conflictExists = await _context.Visits.AnyAsync(v =>
                 v.CarId == dto.CarLicencePlate &&
                 v.Status != Status.Completed &&
@@ -74,11 +71,8 @@ namespace CSMS.service.Visits
                 throw new InvalidOperationException(
                     $"Car '{dto.CarLicencePlate}' already has an open visit on {dto.ServiceDate}.");
 
-            // Reserve 1 unit of each selected product from the branch inventory
-            foreach (var bp in branchProducts)
-            {
-                bp.Quantity -= 1;
-            }
+            // Atomically reserve 1 unit of each selected product from branch inventory
+            await ReserveBranchStockAsync(dto.BranchId, productIds);
 
             // Create Visit — EmployeeId = null until assigned via PUT /visits/{id}/assignment
             var visit = new Visit
@@ -89,7 +83,7 @@ namespace CSMS.service.Visits
                 Status      = Status.Entered,
             };
             _context.Visits.Add(visit);
-            await _context.SaveChangesAsync();  // get VisitId and persist stock reservation
+            await _context.SaveChangesAsync();  // get VisitId
 
             // Create one initial Service record for each product chosen by the customer.
             var services = productIds.Select(productId => new Service
@@ -103,6 +97,9 @@ namespace CSMS.service.Visits
             }).ToList();
             _context.Services.AddRange(services);
             await _context.SaveChangesAsync();
+
+            if (transaction is not null)
+                await transaction.CommitAsync();
 
             return new BookingResponseDto
             {
@@ -457,9 +454,13 @@ namespace CSMS.service.Visits
         public async Task<ConfirmationResponseDto?> ProcessCustomerConfirmationAsync(string customerId,
             int visitId, CustomerConfirmationDto dto)
         {
+            await using var transaction = _context.Database.IsRelational()
+                ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                : null;
+
             var visit = await _context.Visits
                 .Include(v => v.Services)
-                .FirstOrDefaultAsync(v => v.VisitId == visitId&& v.Car.Customer.UserId == customerId);
+                .FirstOrDefaultAsync(v => v.VisitId == visitId && v.Car.Customer.UserId == customerId);
             if (visit is null) return null;
 
             if (visit.Status != Status.DiagnosesSentToCustomer)
@@ -475,8 +476,6 @@ namespace CSMS.service.Visits
 
             if (!selectedIds.All(id => serviceIds.Contains(id)))
                 throw new Exception("Invalid service IDs for this visit.");
-
-            
 
             var newlyApprovedProductIds = visit.Services
                 .Where(svc => !svc.Approved && dto.ApprovedServiceIds.Contains(svc.ServiceId))
@@ -504,6 +503,9 @@ namespace CSMS.service.Visits
             visit.Status = anyApproved ? Status.InProgress : Status.serviceRejected;
 
             await _context.SaveChangesAsync();
+            if (transaction is not null)
+                await transaction.CommitAsync();
+
             await NotifyVisitStatusChangedAsync(customerId, visit.VisitId, visit.Status);
 
             return new ConfirmationResponseDto
@@ -522,28 +524,46 @@ namespace CSMS.service.Visits
 
             var counts = productIds
                 .GroupBy(id => id)
-                .ToDictionary(g => g.Key, g => g.Count());
-            var distinctIds = counts.Keys.ToList();
+                .OrderBy(g => g.Key) // deterministic lock order to avoid deadlocks
+                .ToList();
 
+            if (_context.Database.IsRelational())
+            {
+                foreach (var group in counts)
+                {
+                    var productId = group.Key;
+                    var needed = group.Count();
+                    var affected = await _context.BranchProducts
+                        .Where(bp => bp.BranchId == branchId && bp.ProductId == productId && bp.Quantity >= needed)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(bp => bp.Quantity, bp => bp.Quantity - needed));
+
+                    if (affected == 0)
+                        throw new InvalidOperationException(
+                            $"Product(s) {productId} are not available at branch {branchId} or are out of stock.");
+                }
+                return;
+            }
+
+            var distinctIds = counts.Select(g => g.Key).ToList();
             var entries = await _context.BranchProducts
                 .Where(bp => bp.BranchId == branchId && distinctIds.Contains(bp.ProductId))
                 .ToListAsync();
             var entryMap = entries.ToDictionary(bp => bp.ProductId);
 
             var insufficient = new List<int>();
-            foreach (var (productId, needed) in counts)
+            foreach (var group in counts)
             {
-                if (!entryMap.TryGetValue(productId, out var entry) || entry.Quantity < needed)
-                    insufficient.Add(productId);
+                if (!entryMap.TryGetValue(group.Key, out var entry) || entry.Quantity < group.Count())
+                    insufficient.Add(group.Key);
             }
 
             if (insufficient.Count > 0)
                 throw new InvalidOperationException(
-                    $"Product(s) {string.Join(", ", insufficient)} are out of stock at branch {branchId}.");
+                    $"Product(s) {string.Join(", ", insufficient)} are not available at branch {branchId} or are out of stock.");
 
-            foreach (var (productId, needed) in counts)
+            foreach (var group in counts)
             {
-                entryMap[productId].Quantity -= needed;
+                entryMap[group.Key].Quantity -= group.Count();
             }
         }
 
@@ -554,16 +574,31 @@ namespace CSMS.service.Visits
 
             var counts = productIds
                 .GroupBy(id => id)
-                .ToDictionary(g => g.Key, g => g.Count());
-            var distinctIds = counts.Keys.ToList();
+                .OrderBy(g => g.Key)
+                .ToList();
 
+            if (_context.Database.IsRelational())
+            {
+                foreach (var group in counts)
+                {
+                    var productId = group.Key;
+                    var count = group.Count();
+                    await _context.BranchProducts
+                        .Where(bp => bp.BranchId == branchId && bp.ProductId == productId)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(bp => bp.Quantity, bp => bp.Quantity + count));
+                }
+                return;
+            }
+
+            var distinctIds = counts.Select(g => g.Key).ToList();
             var entries = await _context.BranchProducts
                 .Where(bp => bp.BranchId == branchId && distinctIds.Contains(bp.ProductId))
                 .ToListAsync();
 
+            var countMap = counts.ToDictionary(g => g.Key, g => g.Count());
             foreach (var entry in entries)
             {
-                if (counts.TryGetValue(entry.ProductId, out var count))
+                if (countMap.TryGetValue(entry.ProductId, out var count))
                     entry.Quantity += count;
             }
         }
@@ -636,10 +671,26 @@ namespace CSMS.service.Visits
                 if (firstSvc is not null)
                     firstSvc.Description = $"[COMPLETED] {dto.CompletionNotes} | {firstSvc.Description}";
             }
-            var request = _context.EmergencyRequests.FirstOrDefault(i => i.CarLicencePlate == visit.Car.LicencesPlate);
-            if(request!=null)
+            var activeEmergencyStatuses = EmergencyStatusHelper.ActiveStatuses;
+            var request = await _context.EmergencyRequests
+                .Include(i => i.Driver)
+                .Include(i => i.Truck)
+                .Where(i => i.CarLicencePlate == visit.Car.LicencesPlate &&
+                            activeEmergencyStatuses.Contains(i.StatusEmergency))
+                .OrderByDescending(i => i.EmergencyRequestId)
+                .FirstOrDefaultAsync();
+            if (request is not null)
             {
                 request.StatusEmergency = StatusEmergency.completed;
+                request.UpdatedAt = DateTime.UtcNow;
+                if (request.Driver is not null)
+                {
+                    request.Driver.IsAvailable = true;
+                }
+                if (request.Truck is not null)
+                {
+                    request.Truck.IsAvailable = true;
+                }
             }
 
             visit.Status = Status.Completed ;//if there is a emegency request for that car and this car is finoshed change the status of the emegency request 

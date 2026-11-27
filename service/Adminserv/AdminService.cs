@@ -148,7 +148,7 @@ namespace CSMS.service.Adminserv
                 var amount = rental.IsCancelled ? rental.CancellationFee : rental.PriceForRent;
                 if (amount > 0)
                 {
-                    rows.Add(new RevenueRow(rental.RentStartDate, RentalsCategory, amount));
+                    rows.Add(new RevenueRow(rental.RentStartDate, RentalsCategory, amount, null));
                 }
             }
 
@@ -157,7 +157,8 @@ namespace CSMS.service.Adminserv
                 rows.Add(new RevenueRow(
                     DateOnly.FromDateTime(service.ServiceDate),
                     ServicesCategory,
-                    (double)service.Price));
+                    (double)service.Price,
+                    service.BranchId));
             }
 
             return rows;
@@ -249,16 +250,18 @@ namespace CSMS.service.Adminserv
                 .ToListAsync();
 
             return branches
-                .Select(branch => new BranchReportRowViewModel
+                .Select(branch =>
                 {
-                    BranchId = branch.BranchId,
-                    BranchName = branch.BranchName,
-                    Services = revenueRows.Count(row =>
-                        row.Category == ServicesCategory),
-                    Emergencies = emergencyBranchIds.Count(id => id == branch.BranchId),
-                    Revenue = Math.Round(
-                        revenueRows.Sum(row => row.Amount),
-                        2)
+                    var branchServices = revenueRows.Where(row =>
+                        row.Category == ServicesCategory && row.BranchId == branch.BranchId).ToList();
+                    return new BranchReportRowViewModel
+                    {
+                        BranchId = branch.BranchId,
+                        BranchName = branch.BranchName,
+                        Services = branchServices.Count,
+                        Emergencies = emergencyBranchIds.Count(id => id == branch.BranchId),
+                        Revenue = Math.Round(branchServices.Sum(row => row.Amount), 2)
+                    };
                 })
                 .ToList();
         }
@@ -348,6 +351,6 @@ namespace CSMS.service.Adminserv
         }
 
 
-        public record RevenueRow(DateOnly Date, string Category, double Amount);
+        public record RevenueRow(DateOnly Date, string Category, double Amount, int? BranchId = null);
     }
 }
